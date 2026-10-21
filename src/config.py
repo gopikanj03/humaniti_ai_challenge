@@ -39,6 +39,17 @@ def get_config() -> dict[str, Any]:
         raise ConfigError(f"PROVIDER must be one of {sorted(VALID_PROVIDERS)}, got {cfg['provider']!r}")
 
     cfg["logging"]["level"] = os.getenv("LOG_LEVEL", cfg["logging"]["level"])
+    # Model names can be set in .env (they override config.yaml), so they are visible next to the API key.
+    for env, section, key in (("TRANSCRIBE_MODEL", cfg["transcription"]["groq"], "model"),
+                              ("CONDENSE_MODEL", cfg["llm"], "condense_model"),
+                              ("JUDGE_MODEL", cfg["llm"], "judge_model")):
+        if os.getenv(env, "").strip():
+            section[key] = os.getenv(env).strip()
+    for env, key in (("CONDENSE_PARALLEL_MODELS", "condense_parallel_models"),
+                     ("CONDENSE_FALLBACK_MODELS", "condense_fallback_models"),
+                     ("JUDGE_FALLBACK_MODELS", "judge_fallback_models")):
+        if os.getenv(env) is not None:
+            cfg["llm"][key] = [m.strip() for m in os.getenv(env).split(",") if m.strip()]
     cfg["ffmpeg_bin"] = os.getenv("FFMPEG_BIN", "ffmpeg")
     cfg["ffprobe_bin"] = os.getenv("FFPROBE_BIN", "ffprobe")
     cfg["cache"]["dir"] = str(ROOT / cfg["cache"]["dir"])

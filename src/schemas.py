@@ -96,7 +96,7 @@ class Metric(BaseModel):
     name: str
     value: float | int | bool | str | None     # None = could not be measured
     unit: str = ""
-    source: Literal["audio", "transcript", "speakers", "events"]
+    source: Literal["audio", "transcript", "speakers", "events", "visual"]
     reliability: Literal["high", "medium", "low"] = "high"
     note: str = ""
 

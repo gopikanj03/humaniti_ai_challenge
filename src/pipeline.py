@@ -20,7 +20,7 @@ from typing import Callable
 
 from pydantic import BaseModel, Field
 
-from . import cache, media, scoring, speakers
+from . import cache, llm, media, scoring, speakers, visual
 from .cache import file_sha256
 from .condense import condense
 from .config import ConfigError, get_config, setup_logging
@@ -31,13 +31,34 @@ from .metrics import compute_all
 from .net import ProviderError
 from .schemas import Assessment, ChunkDigest, DimensionScore, MediaInfo, Metric, ScoreResult, Transcript
 from .speakers import SpeakerResult
+from .visual import VisualResult
 from .transcribe import LANGUAGE_NAMES, transcribe
 
 log = logging.getLogger(__name__)
-# on_stage(stage_name, fraction_complete_of_that_stage)
-StageFn = Callable[[str, float], None]
+# on_stage(stage_name, fraction_complete_of_that_stage, plain-language detail for the UI)
+StageFn = Callable[[str, float, str], None]
 
 MUTED_MAX_DB = -50.0  # if even the loudest sample is below this, treat as muted
+TEMP_PREFIX = "classeval_"
+STALE_TEMP_S = 2 * 3600  # far longer than any real run, so an analysis in progress is never touched
+
+
+def sweep_stale_temp() -> int:
+    """Delete per-run temp dirs left behind by runs that were killed or crashed (a hard kill skips
+    `finally`, which would otherwise leave a class's audio on disk). Returns how many were removed."""
+    import time
+
+    removed = 0
+    for d in Path(tempfile.gettempdir()).glob(f"{TEMP_PREFIX}*"):
+        try:
+            if d.is_dir() and time.time() - d.stat().st_mtime > STALE_TEMP_S:
+                shutil.rmtree(d, ignore_errors=True)
+                removed += 1
+        except OSError:
+            continue
+    if removed:
+        log.info("removed %d stale temp dir(s) from interrupted runs", removed)
+    return removed
 
 
 class Signal(BaseModel):
@@ -52,6 +73,7 @@ class PipelineResult(BaseModel):
     audio_levels: dict[str, float]
     transcript: Transcript
     speakers: SpeakerResult | None = None
+    visual: VisualResult | None = None
     digests: list[ChunkDigest] = Field(default_factory=list)
     metrics: list[Metric] = Field(default_factory=list)
     assessment: Assessment | None = None
@@ -67,6 +89,17 @@ def _speakers_cached(wav: Path, file_hash: str) -> SpeakerResult:
     if hit is not None:
         return SpeakerResult.model_validate(hit)
     res = speakers.separate(wav)
+    cache.save(file_hash, key, res.model_dump())
+    return res
+
+
+def _visual_cached(video: Path, duration: float, file_hash: str) -> VisualResult:
+    params = hashlib.sha256(json.dumps(get_config()["visual"], sort_keys=True).encode()).hexdigest()[:8]
+    key = f"visual_{params}"
+    hit = cache.load(file_hash, key)
+    if hit is not None:
+        return VisualResult.model_validate(hit)
+    res = visual.analyse(video, duration)
     cache.save(file_hash, key, res.model_dump())
     return res
 
@@ -100,7 +133,7 @@ def _signals(r: PipelineResult) -> list[Signal]:
     lang = LANGUAGE_NAMES.get(t.language, t.language) or "unknown"
     sig = [
         Signal(name="Transcript", status="used" if usable else "missing",
-               detail=f"{usable} usable segments, {lang}, {t.model}"),
+               detail=f"{usable} usable segments, {lang}"),
         Signal(name="Speaker separation (teacher vs students)",
                status="missing" if not spk or spk.teacher_share is None else
                "used" if spk.confidence >= 0.7 else "partial",
@@ -109,8 +142,7 @@ def _signals(r: PipelineResult) -> list[Signal]:
         Signal(name="Event digests", status="used" if r.digests else "missing",
                detail=f"{sum(len(d.events) for d in r.digests)} verified/unverified events, "
                       f"{sum(d.dropped_events for d in r.digests)} dropped as unverifiable"),
-        Signal(name="Video frames (camera, 8x8 background, lighting)", status="missing",
-               detail="visual analysis not enabled yet"),
+        _visual_signal(r.visual),
         Signal(name="Reference anchors / reviewer style",
                status="used" if (Path(__file__).parent.parent / "config" / "anchors.json").exists() else "missing",
                detail="built from the labelled dataset by scripts/build_anchors.py"),
@@ -118,25 +150,44 @@ def _signals(r: PipelineResult) -> list[Signal]:
     return sig
 
 
+def _visual_signal(vis: VisualResult | None) -> Signal:
+    name = "Video frames (camera, 8x8 background)"
+    if vis is None or not vis.frames:
+        return Signal(name=name, status="missing", detail="no video track, or frames could not be read")
+    cam = sum(f.camera_view for f in vis.frames)
+    return Signal(name=name, status="used" if cam >= 3 else "partial",
+                  detail=f"{len(vis.frames)} frames sampled every ~{vis.interval_s:.0f} s, analysed locally; "
+                         f"tutor camera large in {cam}. Lighting quality not measured (fairness)")
+
+
 def run(src_path: str | Path | None = None, on_stage: StageFn | None = None, *,
         url: str | None = None) -> PipelineResult:
     """Run on a local file (`src_path`) or a link (`url`). Exactly one must be given."""
     if (src_path is None) == (url is None):
         raise ValueError("pass exactly one of src_path or url")
-    notify = on_stage or (lambda stage, frac: None)
-    work = Path(tempfile.mkdtemp(prefix="classeval_"))
+    def notify(stage: str, frac: float, detail: str = "") -> None:
+        if on_stage:
+            on_stage(stage, frac, detail)
+    sweep_stale_temp()
+    llm.fallbacks_used.clear()
+    work = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX))
     try:
         if url is not None:
-            notify("Downloading", 0.0)
-            src = download(url, work, on_progress=lambda f: notify("Downloading", f))
+            notify("Downloading", 0.0, "Fetching the recording from the link")
+            src = download(url, work, on_progress=lambda f: notify("Downloading", f, f"{f:.0%} downloaded"))
         else:
             src = Path(src_path)
-        notify("Validating file", 0.0)
+        notify("Validating file", 0.0, "Checking the file can be read and is a supported length")
         info = media.validate(src)
         file_hash = file_sha256(src)
         log.info("validated input: %.0fs, %.1f MB, video=%s", info.duration_s, info.size_mb, info.has_video)
 
-        notify("Extracting audio", 0.0)
+        # Video frames are analysed locally in the background while the audio path runs.
+        pool = ThreadPoolExecutor(max_workers=2)
+        vis_future = (pool.submit(_visual_cached, src, info.duration_s, file_hash)
+                      if info.has_video and get_config()["visual"]["enabled"] else None)
+
+        notify("Extracting audio", 0.0, "Pulling the audio track out of the video")
         wav = media.extract_audio(src, work)
         levels = media.audio_levels(wav)
         warnings: list[str] = []
@@ -149,36 +200,47 @@ def run(src_path: str | Path | None = None, on_stage: StageFn | None = None, *,
                                     warnings=["No usable speech was transcribed."])
         else:
             chunks = media.chunk_audio(wav, info.duration_s, work)
-            notify("Transcribing + separating speakers", 0.0)
+            notify("Transcribing + separating speakers", 0.0, f"Transcribing part 1 of {len(chunks)}")
             # Network-bound transcription and CPU-bound speaker separation run side by side.
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                spk_future = pool.submit(_speakers_cached, wav, file_hash)
-                transcript = transcribe(chunks, info.duration_s, file_hash, on_progress=lambda i, n: notify(
-                    "Transcribing + separating speakers", 0.9 * i / max(n, 1)))
-                try:
-                    spk = spk_future.result()
-                except Exception as e:  # separation is optional: degrade, don't fail the run
-                    log.warning("speaker separation failed: %s", type(e).__name__)
-                    warnings.append("Speaker separation failed; participation metrics are unavailable.")
+            spk_future = pool.submit(_speakers_cached, wav, file_hash)
+            transcript = transcribe(chunks, info.duration_s, file_hash, on_progress=lambda i, n: notify(
+                "Transcribing + separating speakers", 0.9 * i / max(n, 1),
+                f"Transcribing part {min(i + 1, n)} of {n}" if i < n else "Telling teacher and student voices apart"))
+            try:
+                spk = spk_future.result()
+            except Exception as e:  # separation is optional: degrade, don't fail the run
+                log.warning("speaker separation failed: %s", type(e).__name__)
+                warnings.append("Speaker separation failed; participation metrics are unavailable.")
             if spk:
                 speakers.label_segments(transcript.segments, spk)
                 warnings += spk.warnings
 
         digests: list[ChunkDigest] = []
         if transcript.usable_segments():
-            notify("Summarising the class", 0.0)
+            notify("Summarising the class", 0.0, "Reading the class section by section")
             digests, _names = condense(transcript, file_hash,
-                                       on_progress=lambda i, n: notify("Summarising the class", i / max(n, 1)))
+                                       on_progress=lambda i, n: notify("Summarising the class", i / max(n, 1),
+                                                                       f"{i} of {n} sections summarised"))
 
-        notify("Computing metrics", 0.0)
-        metrics = compute_all(transcript, spk, digests)
+        vis: VisualResult | None = None
+        if vis_future is not None:
+            try:
+                vis = vis_future.result()
+                warnings += vis.warnings
+            except Exception as e:  # visual checks are optional: degrade, don't fail the run
+                log.warning("visual analysis failed: %s", type(e).__name__)
+                warnings.append("Video frames could not be analysed; camera and background were not assessed.")
+
+        notify("Computing metrics", 0.0, "Counting questions, answers, praise and talk time")
+        metrics = compute_all(transcript, spk, digests) + (vis.metrics if vis else [])
 
         meta = {"duration": f"{info.duration_s / 60:.0f} min",
                 "language": LANGUAGE_NAMES.get(transcript.language, transcript.language) or "unknown",
                 "subject": "chess, for children, online (Zoom)"}
         if digests:
-            notify("Assessing against the rubric", 0.0)
-            assessment, _ = evaluate(digests, metrics, meta, file_hash)
+            notify("Assessing against the rubric", 0.0, "Scoring 6 rubric areas and checking every piece of evidence")
+            assessment, _ = evaluate(digests, metrics, meta, file_hash,
+                                     visual=vis.observations if vis and vis.frames else None)
         else:
             assessment = Assessment(
                 summary="The recording has no usable speech, so teaching could not be assessed.",
@@ -188,11 +250,15 @@ def run(src_path: str | Path | None = None, on_stage: StageFn | None = None, *,
         result = scoring.score(assessment, quality=_quality_factors(transcript, spk, digests, metrics))
         notify("Done", 1.0)
         out = PipelineResult(file_hash=file_hash, media=info, audio_levels=levels, transcript=transcript,
-                             speakers=spk, digests=digests, metrics=metrics, assessment=assessment, result=result,
-                             warnings=warnings + transcript.warnings)
+                             speakers=spk, visual=vis, digests=digests, metrics=metrics, assessment=assessment,
+                             result=result, warnings=warnings + transcript.warnings
+                             + (["Part of this analysis used a backup model, so wording may differ slightly."]
+                                if llm.fallbacks_used else []))
         out.signals = _signals(out)
         return out
     finally:
+        if "pool" in locals():
+            pool.shutdown(wait=True, cancel_futures=True)  # frame grabs read the source file, so finish before deleting it
         shutil.rmtree(work, ignore_errors=True)
         if work.exists():
             log.warning("temp dir could not be fully removed: %s", work)
@@ -230,7 +296,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         sys.exit("usage: python -m src.pipeline <recording file or link>")
     arg = sys.argv[1]
-    progress = lambda s, f: print(f"[{s}] {f:.0%}", file=sys.stderr)  # noqa: E731
+    progress = lambda s, f, d="": print(f"[{s}] {f:.0%} {d}", file=sys.stderr)  # noqa: E731
     is_link = arg.startswith(("http://", "https://"))
     try:
         res = run(url=arg, on_stage=progress) if is_link else run(arg, on_stage=progress)

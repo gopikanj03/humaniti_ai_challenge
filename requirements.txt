@@ -15,6 +15,9 @@ scikit-learn>=1.4
 # Stage 5: visual signals (face detection/blurring, frame checks)
 opencv-python-headless>=4.10
 
+# PDF report download
+fpdf2>=2.7
+
 # Stage 4 dataset scripts (offline only)
 pypdf>=4.0                  # read data/feedbacks.pdf
 scipy>=1.11                 # Spearman correlations, connected components (also used by scikit-learn)

@@ -6,11 +6,44 @@ Silence is reported neutrally: in a chess class, quiet stretches are often child
 from __future__ import annotations
 
 import math
+import re
 import statistics
 
 from .audio import audio_metrics
 from .schemas import ChunkDigest, Event, Metric, Segment, Transcript
 from .speakers import SpeakerResult
+
+METRIC_LABELS = {
+    "speech_ratio": "Speech in recording", "long_silences": "Long silences (≥30 s)",
+    "longest_silence_s": "Longest silence", "first_speech_s": "Time before first speech",
+    "teacher_talk_share": "Teacher talk share", "student_talk_share": "Student talk share",
+    "student_turns_per_10min": "Student turns per 10 min", "median_student_turn_s": "Median student turn",
+    "speaker_confidence": "Speaker separation confidence", "questions_total": "Teacher questions",
+    "questions_per_10min": "Questions per 10 min", "open_question_share": "Open questions share",
+    "question_response_rate": "Questions answered", "median_wait_time_s": "Median wait after question",
+    "students_addressed_individually": "Children addressed individually", "students_named_total": "Children named",
+    "praise_count": "Praise moments", "greeting_or_rapport_in_first_10min": "Greeting / rapport early",
+    "homework_given": "Homework given", "recap_or_conclusion_in_last_10min": "Recap / closing at the end",
+    "technical_issues": "Technical issues", "unverifiable_events_dropped": "Unverifiable moments dropped",
+    "language": "Language", "transcription_confidence": "Transcription clarity",
+    "low_confidence_segment_share": "Low-confidence speech share",
+    "frames_sampled": "Video frames sampled", "camera_view_share": "Tutor camera full-size",
+    "face_visible_share": "Face visible (any size)", "no_face_share": "No face detected",
+    "logo_in_camera_view_share": "8x8 background (camera frames)", "near_black_frame_share": "Black frames",
+    "static_screen_share": "Screen unchanged between samples",
+}
+
+
+def humanize(text: str) -> str:
+    """Replace raw metric names (e.g. "recap_or_conclusion_in_last_10min = true") with plain words."""
+    def name(match: re.Match) -> str:
+        key = match.group(1)
+        return METRIC_LABELS.get(key, key.replace("_", " ")).lower()
+    text = re.sub(r"\b([a-z]+(?:_[a-z0-9]+)+)\b", name, text)
+    text = re.sub(r"\s*=\s*(true|True)\b", ": yes", text)
+    text = re.sub(r"\s*=\s*(false|False)\b", ": no", text)
+    return re.sub(r"\s+=\s+", ": ", text)  # "name = value" only; leaves "2+2=4" alone
+
 
 RESPONSE_WINDOW_S = 20.0    # a student turn starting within this after a question counts as a response
 

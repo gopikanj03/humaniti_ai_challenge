@@ -1,0 +1,52 @@
+"""Report downloads (PDF / Word / text / JSON) and plain-language output, on a synthetic result."""
+import json
+import re
+
+from src import report
+from src.metrics import humanize
+from src.pipeline import PipelineResult, Signal
+from src.schemas import (Assessment, DimensionScore, EvidenceItem, MediaInfo, Metric, ScoreResult, Transcript)
+
+EMOJI = re.compile("[\U0001F300-\U0001FAFF☀-➿⬀-⯿⏩-⏿]")
+
+
+def _result() -> PipelineResult:
+    ev = [EvidenceItem(timestamp="12:05", observation='Asked Student 2 "നല്ല നീക്കം ഏതാണ്?" and waited.')]
+    a = Assessment(summary="Clear lesson with a recap.", confidence=0.7,
+                   dimensions=[DimensionScore(dimension="teaching_accuracy", score=4.5, rationale="No errors found.",
+                                              evidence=ev),
+                               DimensionScore(dimension="professional_setup", score=None)],
+                   strengths=ev, improvements=[EvidenceItem(timestamp="40:00", observation="Should give homework.")])
+    return PipelineResult(
+        file_hash="abc", media=MediaInfo(duration_s=2700, has_video=True, has_audio=True, size_mb=100, container="mp4"),
+        audio_levels={}, transcript=Transcript(duration_s=2700, provider="groq", model="whisper", language="ml"),
+        assessment=a, result=ScoreResult(label="Good", score=3.4, confidence=0.66, low_confidence=False,
+                                         weight_coverage=0.9),
+        metrics=[Metric(name="homework_given", value=False, source="events"),
+                 Metric(name="speech_ratio", value=0.66, source="audio")],
+        signals=[Signal(name="Transcript", status="used", detail="500 segments")])
+
+
+def test_pdf_report_has_the_essentials_only():
+    from fpdf import FPDF  # noqa: F401  (dependency present)
+    data = report.report_data(_result())
+    pdf = report.to_pdf(data)
+    assert pdf[:4] == b"%PDF"
+    assert not any(hasattr(report, f) for f in ("to_json", "to_docx", "to_text"))   # PDF is the only format
+    assert set(data) >= {"result", "summary", "strengths", "improvements", "dimensions"}
+    assert not {"metrics", "signals", "limitations"} & set(data)                     # these stay in the app
+
+
+def test_pdf_marks_non_latin_text_instead_of_failing():
+    assert report._latin1("Asked “നല്ല നീക്കം” – good") == 'Asked "[quote in original language]" - good'
+
+
+def test_reports_contain_no_emojis_and_no_transcript():
+    data = report.report_data(_result())
+    assert not EMOJI.search(str(data))
+    assert "segments" not in json.dumps(data["result"])  # no transcript content in the report body
+
+
+def test_humanize_replaces_metric_names():
+    assert humanize("recap_or_conclusion_in_last_10min = true") == "recap / closing at the end: yes"
+    assert humanize("2+2=4 and Student 3") == "2+2=4 and Student 3"

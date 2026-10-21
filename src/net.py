@@ -48,9 +48,10 @@ def throttle() -> Throttle:
 
 
 class ProviderError(RuntimeError):
-    def __init__(self, message: str, code: str = ""):
+    def __init__(self, message: str, code: str = "", retry_after: float | None = None):
         super().__init__(message)
-        self.code = code  # provider error code, e.g. "json_validate_failed" (never message text)
+        self.code = code  # provider error code, e.g. "json_validate_failed" or "daily_limit" (never message text)
+        self.retry_after = retry_after
 
 
 def _error_code(resp) -> str:
@@ -60,6 +61,23 @@ def _error_code(resp) -> str:
     except Exception:
         return ""
     return f" ({code})" if isinstance(code, str) and code.replace("_", "").isalnum() else ""
+
+
+MAX_WAIT_S = 90  # longer waits than this (e.g. daily caps) are reported instead of slept through
+
+
+def _limit_message(resp: requests.Response) -> str:
+    """Groq names the exhausted limit in the error message, e.g. "tokens per day (TPD)". The message holds
+    only limit names and numbers (no request content), so it is safe to inspect."""
+    try:
+        return str(resp.json().get("error", {}).get("message", ""))
+    except Exception:
+        return ""
+
+
+def _is_daily_limit(resp: requests.Response) -> bool:
+    msg = _limit_message(resp)
+    return "per day" in msg or "(TPD)" in msg or "(RPD)" in msg
 
 
 def _retry_after(resp: requests.Response) -> float | None:
@@ -90,11 +108,21 @@ def request_with_retry(send: Callable[[], requests.Response]) -> requests.Respon
                 return resp
             if resp.status_code in (401, 403):
                 raise ProviderError(f"provider rejected the API key (HTTP {resp.status_code}); check GROQ_API_KEY")
+            wait = _retry_after(resp)
+            if resp.status_code in (413, 429) and _limit_message(resp).startswith("Request too large"):
+                # This model's per-request cap (e.g. output tokens per minute) is below what we ask for:
+                # retrying can never succeed, so let the caller switch model.
+                raise ProviderError("request too large for this model's free-tier limits", code="model_limit")
+            if resp.status_code == 429 and (_is_daily_limit(resp) or (wait or 0) > MAX_WAIT_S):
+                # Waiting minutes or hours inside a request just looks like a hang: fail fast and say why.
+                minutes = max(1, round((wait or 0) / 60))
+                raise ProviderError(f"free-tier usage limit reached; it resets in about {minutes} min",
+                                    code="daily_limit", retry_after=wait)
             if resp.status_code not in RETRY_STATUS or attempt == max_retries:
                 # Error bodies can echo request content; report only the status and the error code.
                 raise ProviderError(f"provider returned HTTP {resp.status_code}{_error_code(resp)}",
                                     code=_error_code(resp).strip(" ()"))
-            delay = _retry_after(resp) or min(60, 2 ** attempt) + random.random()
+            delay = wait or min(60, 2 ** attempt) + random.random()
         log.warning("provider call failed (attempt %d/%d); retrying in %.1fs", attempt + 1, max_retries + 1, delay)
         time.sleep(delay)
     raise ProviderError("unreachable")

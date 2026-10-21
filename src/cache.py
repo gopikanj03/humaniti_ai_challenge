@@ -4,11 +4,17 @@ Policy (agreed with the project owner): the app never WRITES to the cache, so a 
 recording or link leaves no transcript or results on disk. It may READ entries that already exist
 (e.g. from development runs). Offline dataset scripts call `enable_writes()` so long batch runs on
 the free tier can resume after rate limits.
+
+While disk writes are off, finished stages are kept IN MEMORY for the last few recordings of the running
+app process, so a run that fails at a late step (e.g. a rate limit at the judge) can be retried without
+redoing transcription and summaries. Nothing is written to disk; restarting the app clears it.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +40,29 @@ def enable_writes() -> None:
     get_config()["cache"]["write"] = True
 
 
+MEMORY_RECORDINGS = 3  # recent recordings whose stage results are kept in memory
+_memory: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
+_memory_lock = threading.Lock()
+
+
+def _remember(file_hash: str, stage: str, data: Any) -> None:
+    with _memory_lock:
+        stages = _memory.setdefault(file_hash, {})
+        stages[stage] = data
+        _memory.move_to_end(file_hash)
+        while len(_memory) > MEMORY_RECORDINGS:
+            _memory.popitem(last=False)
+
+
+def clear_memory() -> None:
+    with _memory_lock:
+        _memory.clear()
+
+
 def load(file_hash: str, stage: str) -> Any | None:
+    with _memory_lock:
+        if stage in _memory.get(file_hash, {}):
+            return _memory[file_hash][stage]
     if not get_config()["cache"]["read"]:
         return None
     p = _path(file_hash, stage)
@@ -48,6 +76,7 @@ def load(file_hash: str, stage: str) -> Any | None:
 
 def save(file_hash: str, stage: str, data: Any) -> None:
     if not get_config()["cache"]["write"]:
+        _remember(file_hash, stage, data)  # in memory only: lets a failed run resume, never touches disk
         return
     p = _path(file_hash, stage)
     p.parent.mkdir(parents=True, exist_ok=True)

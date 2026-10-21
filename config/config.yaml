@@ -50,16 +50,37 @@ speakers:
   teacher_min_fraction: 0.6   # segment is "teacher" if >= this much of it overlaps teacher windows
   student_max_fraction: 0.4   # "student" if <= this; in between = "mixed"
 
+visual:
+  enabled: true
+  interval_s: 45             # one frame per 45 s: sparse samples, never "continuous observation"
+  max_frames: 120
+  frame_width: 960           # frames are downscaled in memory; never written to disk
+  camera_face_min_height: 0.18   # a face this tall (share of frame height) = tutor camera shown large
+  logo_template: assets/8x8_logo_template.png   # right-hand "8" of the 8x8 background, cut from a 1920 px frame
+  logo_threshold: 0.6        # checked on 3 tutors: no-logo frames <= 0.49, logo frames 0.68-1.00 (narrow margin)
+  logo_scales: [0.6, 0.75, 0.9, 1.0, 1.15, 1.3]
+  static_diff: 2.0           # mean abs grey-level change below this between samples = unchanged screen
+  near_black_mean: 18        # mean grey level below this = black frame (camera covered / video off)
+  # Frames show children's faces and names, so they are analysed locally only. A vision model is used
+  # only if named here AND offered by the provider's model list (none is on the current Groq account).
+  vision_model: null
+
 llm:
   condense_model: openai/gpt-oss-20b    # fast model: per-chunk event extraction
   judge_model: openai/gpt-oss-120b      # strongest available: final rubric judgement
+  # Each Groq model has its own free-tier allowance (gpt-oss-20b: 200k tokens/day). When one is used up,
+  # the next model in the list is tried, and the result says so.
+  # qwen/qwen3.8-27b is NOT usable on the free tier: 1,000 output tokens/min, below one summary (~1,500).
+  condense_parallel_models: [openai/gpt-oss-120b]   # extra lane: sections are summarised in parallel
+  condense_fallback_models: [openai/gpt-oss-120b]
+  judge_fallback_models: [openai/gpt-oss-20b]
   temperature: 0.2
   # Groq counts prompt + max_completion_tokens against the per-minute token limit, so each request
   # must fit max_request_tokens (free tier: 8000 TPM per model). Raise it on a paid tier.
   max_request_tokens: 7500
-  condense_max_tokens: 3000
+  condense_max_tokens: 2200   # replies use ~1,500; Groq counts the full allowance against tokens/min
   condense_reasoning_effort: low        # gpt-oss option; null for models that don't support it
-  judge_max_tokens: 3500
+  judge_max_tokens: 3000
   judge_reasoning_effort: medium
 
 scoring:
@@ -81,7 +102,7 @@ scoring:
 groq:
   base_url: https://api.groq.com/openai/v1
   requests_per_minute: 20
-  max_retries: 5
+  max_retries: 8            # per-minute limits clear within a minute; daily limits fail fast instead
   timeout_s: 300
 
 cache:

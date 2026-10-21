@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
+import time
 from typing import TypeVar
 
 import requests
@@ -25,7 +27,7 @@ def estimate_tokens(text: str) -> int:
     """Conservative token estimate without a tokenizer: ~4 chars/token for Latin text, but scripts like
     Malayalam or Devanagari tokenize far less efficiently, so count those characters heavily."""
     ascii_chars = sum(c.isascii() for c in text)
-    return int(ascii_chars / 3.5 + (len(text) - ascii_chars) / 1.2) + 8
+    return int(ascii_chars / 4.0 + (len(text) - ascii_chars) / 1.2) + 8
 
 
 def repair_truncated_json(raw: str) -> dict | None:
@@ -81,8 +83,51 @@ def _chat(model: str, messages: list[dict], max_tokens: int, reasoning_effort: s
     return body["choices"][0]["message"].get("content") or ""
 
 
-def chat_json(model: str, system: str, user: str, schema: type[T], *, max_tokens: int,
+# Models that switched in because the preferred one hit its free-tier limit during this process's runs.
+# The pipeline clears this at the start of a run and reports what it contains at the end.
+fallbacks_used: list[str] = []
+_fallback_lock = threading.Lock()
+
+
+# Models known to be at their free-tier cap, with the time they reset (monotonic clock).
+_exhausted_until: dict[str, float] = {}
+
+
+def chat_json(models: str | list[str], system: str, user: str, schema: type[T], *, max_tokens: int,
               reasoning_effort: str | None = None, file_hash: str | None = None, cache_tag: str = "llm") -> T:
+    """Like `_chat_json_one`, but when a model's free-tier allowance is used up ("daily_limit"), try the next
+    model in the list. Each Groq model has its own allowance, so this extends how much can be processed.
+    Exhausted models are remembered and skipped until they reset, so later calls don't pay for a failed try."""
+    models = [models] if isinstance(models, str) else list(models)
+    now = time.monotonic()
+    usable = [m for m in models if _exhausted_until.get(m, 0) <= now] or models[-1:]
+    if usable[0] != models[0]:
+        _note_fallback(usable[0], models[0])
+    for i, model in enumerate(usable):
+        effort = reasoning_effort if model.startswith("openai/gpt-oss") else None  # gpt-oss-only option
+        try:
+            return _chat_json_one(model, system, user, schema, max_tokens=max_tokens, reasoning_effort=effort,
+                                  file_hash=file_hash, cache_tag=cache_tag)
+        except ProviderError as e:
+            if e.code not in ("daily_limit", "model_limit"):
+                raise
+            _exhausted_until[model] = time.monotonic() + (e.retry_after or 600)
+            if i == len(usable) - 1:
+                raise
+            log.warning("%s: %s hit its usage limit; falling back to %s", cache_tag, model, usable[i + 1])
+            _note_fallback(usable[i + 1], model)
+    raise ProviderError("no model available")
+
+
+def _note_fallback(used: str, instead_of: str) -> None:
+    with _fallback_lock:
+        note = f"{used} (instead of {instead_of}, which hit its free-tier limit)"
+        if note not in fallbacks_used:
+            fallbacks_used.append(note)
+
+
+def _chat_json_one(model: str, system: str, user: str, schema: type[T], *, max_tokens: int,
+                   reasoning_effort: str | None = None, file_hash: str | None = None, cache_tag: str = "llm") -> T:
     """Ask for JSON matching `schema`; on invalid output, retry once with the validation error."""
     key = None
     if file_hash:

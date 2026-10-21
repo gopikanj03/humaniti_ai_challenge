@@ -180,7 +180,33 @@ code {{ background: color-mix(in srgb, var(--accent) 14%, transparent) !importan
 .cc-grid2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0; }}
 @media (max-width: 760px) {{ .cc-grid2, .cc-dims {{ grid-template-columns: 1fr !important; }} .cc-hero-main {{ flex-direction: column; }} }}
 /* progress tracker */
-.cc-progress-title {{ font-weight: 700; margin-bottom: 0.8rem; }}
+.cc-progress-head {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.8rem; }}
+.cc-progress-title {{ font-weight: 700; }}
+.cc-pct {{ font-family: var(--font-display) !important; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }}
+.cc-live {{ display: flex; align-items: center; gap: 0.65rem; margin-top: 1rem; font-weight: 600; color: var(--text); }}
+.cc-live.done {{ color: var(--accent-3); }}
+.cc-live-icon {{ font-weight: 800; }}
+.cc-spinner {{
+  width: 1.05rem; height: 1.05rem; border-radius: 50%; flex-shrink: 0;
+  border: 2.5px solid color-mix(in srgb, var(--accent) 22%, transparent); border-top-color: var(--accent);
+  animation: cc-spin 0.9s linear infinite;
+}}
+@keyframes cc-spin {{ to {{ transform: rotate(360deg); }} }}
+.cc-rotator {{ position: relative; display: inline-block; height: 1.5em; flex: 1; overflow: hidden; }}
+.cc-rotator span {{
+  position: absolute; left: 0; top: 0; white-space: nowrap; opacity: 0;
+  animation-iteration-count: infinite; animation-fill-mode: both; animation-timing-function: ease-in-out;
+}}
+@keyframes cc-cycle1 {{ 0%, 100% {{ opacity: 1; transform: none; }} }}
+@keyframes cc-cycle2 {{ 0% {{ opacity: 0; transform: translateY(6px); }} 6%, 44% {{ opacity: 1; transform: none; }}
+                       50%, 100% {{ opacity: 0; transform: translateY(-6px); }} }}
+@keyframes cc-cycle3 {{ 0% {{ opacity: 0; transform: translateY(6px); }} 4%, 29% {{ opacity: 1; transform: none; }}
+                       33.3%, 100% {{ opacity: 0; transform: translateY(-6px); }} }}
+@keyframes cc-cycle4 {{ 0% {{ opacity: 0; transform: translateY(6px); }} 3%, 22% {{ opacity: 1; transform: none; }}
+                       25%, 100% {{ opacity: 0; transform: translateY(-6px); }} }}
+.cc-detail {{ margin: 0.35rem 0 0 1.7rem; font-size: 0.85rem; color: var(--muted); }}
+@media (prefers-reduced-motion: reduce) {{ .cc-spinner, .cc-rotator span {{ animation: none !important; }}
+  .cc-rotator span:first-child {{ opacity: 1; }} }}
 .cc-steps {{ list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; padding: 0; margin: 0 0 1rem; }}
 .cc-step {{ display: flex; align-items: center; gap: 0.45rem; font-size: 0.88rem; color: var(--muted); }}
 .cc-dot {{
@@ -224,7 +250,13 @@ code {{ background: color-mix(in srgb, var(--accent) 14%, transparent) !importan
   flex-shrink: 0; font-size: 0.76rem; font-weight: 700; padding: 0.12rem 0.55rem; border-radius: 99px;
   background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font-variant-numeric: tabular-nums;
 }}
-.cc-src {{ flex-shrink: 0; font-size: 0.85rem; }}
+.cc-src {{
+  flex-shrink: 0; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 0.14rem 0.45rem; border-radius: 6px; color: var(--text);
+  background: color-mix(in srgb, var(--accent-3) 26%, transparent);
+}}
+.cc-src.metric {{ background: color-mix(in srgb, var(--accent-4) 34%, transparent); }}
+.cc-src.visual {{ background: color-mix(in srgb, var(--accent-2) 26%, transparent); }}
 /* dimensions */
 .cc-dims {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }}
 .cc-dims .cc-card {{ margin-bottom: 0; }}

@@ -239,18 +239,28 @@ def verify_events(raw: _RawDigest, segments: list[Segment]) -> tuple[list[_RawEv
 def condense(transcript: Transcript, file_hash: str,
              on_progress: Callable[[int, int], None] | None = None) -> tuple[list[ChunkDigest], NameMap]:
     lcfg = get_config()["llm"]
-    model, max_tokens = lcfg["condense_model"], lcfg["condense_max_tokens"]
+    max_tokens = lcfg["condense_max_tokens"]
     groups = fit_to_budget(chunk_groups(transcript), prompt_budget(max_tokens, SYSTEM))
-    def run(segments: list[Segment]) -> _RawDigest:
-        return chat_json(model, SYSTEM, _user_message(segments), _RawDigest, max_tokens=max_tokens,
+    # Each Groq model has its own per-minute allowance, so sections alternate between "lanes" (models) and
+    # run in parallel. A lane whose model is at its cap falls back to a model not already used as a lane.
+    lanes = [lcfg["condense_model"]] + [m for m in lcfg.get("condense_parallel_models", [])
+                                        if m != lcfg["condense_model"]]
+    fallbacks = lcfg.get("condense_fallback_models", [])
+
+    def chain(i: int) -> list[str]:
+        primary = lanes[i % len(lanes)]
+        order = [primary] + [m for m in fallbacks if m not in lanes] + [m for m in lanes + fallbacks if m != primary]
+        return list(dict.fromkeys(order))
+
+    def run(i: int, segments: list[Segment]) -> _RawDigest:
+        return chat_json(chain(i), SYSTEM, _user_message(segments), _RawDigest, max_tokens=max_tokens,
                          reasoning_effort=lcfg.get("condense_reasoning_effort"), file_hash=file_hash,
                          cache_tag=PROMPT_VERSION)
 
-    # LLM calls run concurrently (the shared throttle and 429 back-off keep us within rate limits).
     # Progress is reported from this (the caller's) thread: UIs such as Streamlit can't be updated
     # from worker threads.
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        futures = [pool.submit(run, g) for g in groups]
+    with ThreadPoolExecutor(max_workers=max(2, len(lanes))) as pool:
+        futures = [pool.submit(run, i, g) for i, g in enumerate(groups)]
         for n, _ in enumerate(as_completed(futures), start=1):
             if on_progress:
                 on_progress(n, len(groups))

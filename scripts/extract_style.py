@@ -52,7 +52,13 @@ def main() -> None:
         f"{'; '.join(praise_terms)}. Criticism - {'; '.join(criticism_terms)}. "
         f"Reviewers rarely cite moments (only {stats['moment_references']} do); you must go further and tie every "
         "observation to a timestamp, while keeping their short, practical tone. Do not copy their wording verbatim.")
-    out = {"stats": stats, "instructions": instructions}
+    # Compact version for the judge prompt (the free tier leaves little room beside the evidence).
+    short = ("Write like an 8x8 reviewer: short, practical phrases; what worked, then what to change, phrased as "
+             "actions (e.g. 'give new joiners time to introduce themselves', 'should give homework'). Use their "
+             "terms: rapport building, one-to-one interaction, considers everyone, asks questions individually, "
+             "8x8 background, pleasant/energetic interaction. Unlike them, tie every point to a timestamp. "
+             "Paraphrase; never copy notes.")
+    out = {"stats": stats, "instructions": instructions, "short_instructions": short}
     (ROOT / "config" / "style.json").write_text(json.dumps(out, indent=1), encoding="utf-8")
     print(json.dumps(stats, indent=1)); print("\n" + instructions + "\n\nwrote config/style.json")
 

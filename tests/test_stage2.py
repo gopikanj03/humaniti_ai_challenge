@@ -238,10 +238,48 @@ def test_app_never_writes_cache_but_reads_existing(monkeypatch, tmp_path):
     c = get_config()["cache"]
     monkeypatch.setitem(c, "dir", str(tmp_path))
     monkeypatch.setitem(c, "write", False)
+    cache.clear_memory()
     cache.save("abc123", "transcript_x", {"secret": "child name"})
     assert not any(tmp_path.rglob("*")), "app mode must not write anything to disk"
+    assert cache.load("abc123", "transcript_x") == {"secret": "child name"}   # kept in memory for a retry
 
-    monkeypatch.setitem(c, "write", True)                 # what dataset scripts do (enable_writes)
+    cache.clear_memory()                                    # app restart: memory gone, nothing on disk
+    assert cache.load("abc123", "transcript_x") is None
+
+    monkeypatch.setitem(c, "write", True)                   # what dataset scripts do (enable_writes)
     cache.save("abc123", "transcript_x", {"ok": 1})
     monkeypatch.setitem(c, "write", False)
-    assert cache.load("abc123", "transcript_x") == {"ok": 1}  # existing entries are still reused
+    assert cache.load("abc123", "transcript_x") == {"ok": 1}  # existing disk entries are still reused
+
+
+def test_memory_keeps_only_the_last_few_recordings():
+    from src import cache
+    cache.clear_memory()
+    for i in range(cache.MEMORY_RECORDINGS + 2):
+        cache._remember(f"file{i}", "stage", i)
+    assert cache.load("file0", "stage") is None and cache.load(f"file{cache.MEMORY_RECORDINGS + 1}", "stage") is not None
+    cache.clear_memory()
+
+
+def test_section_ranges_are_not_accepted_as_evidence():
+    times = [600.0]
+    assert evaluator._ts_ok("10:05", times) and evaluator._ts_ok("10:05-10:40", times)
+    assert not evaluator._ts_ok("09:50-18:20", times)   # a whole section is not a specific moment
+
+
+def test_judge_always_sees_event_evidence_within_the_real_budget():
+    """Regression: rubric + metrics + style + anchors once filled the whole budget and the judge saw 0 events."""
+    import re
+    from src.config import get_config
+    from src.llm import prompt_budget
+    from src.schemas import Metric
+    metrics = [Metric(name=f"metric_number_{i}", value=0.5, source="events", note="a note that is fairly long " * 3)
+               for i in range(30)]
+    events = [Event(t=60 + i * 20, type="question" if i % 2 else "explanation", detail="teacher asks why the knight "
+                    "move is good and waits", quote="why is this the best move here", verified=True) for i in range(120)]
+    digests = [ChunkDigest(chunk_index=0, start=0, end=3000, summary="a long summary " * 10, events=events)]
+    visual = [f"[{i:02d}:00] tutor camera shown large; 8x8 logo visible." for i in range(12)]
+    lc = get_config()["llm"]
+    prompt = evaluator.build_prompt(digests, metrics, visual, {"duration": "50 min"},
+                                    budget_tokens=prompt_budget(lc["judge_max_tokens"], evaluator.SYSTEM))
+    assert len(re.findall(r"^\[\d", prompt, re.M)) >= 30

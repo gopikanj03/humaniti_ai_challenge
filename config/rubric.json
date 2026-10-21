@@ -1,62 +1,116 @@
 {
-  "version": "draft-1",
-  "note": "Hand-drafted from recurring themes in the 10 labelled feedback notes. To be reviewed against scripts/derive_rubric.py and scripts/triage_themes.py output (stage 4). Weights are starting points, tuned by scripts/calibrate.py.",
+  "version": "draft-2",
+  "note": "Dimensions from recurring themes in the 10 labelled feedback notes (scripts/derive_rubric.py), plus Teaching Accuracy, added at the project owner's request as the most important criterion. Weights set by the project owner; scripts/calibrate.py only suggests changes.",
   "scale": "0 = absent or harmful, 1 = very weak, 2 = weak, 3 = adequate, 4 = good, 5 = excellent. Use null when there is not enough evidence.",
   "dimensions": [
     {
+      "id": "teaching_accuracy",
+      "name": "Teaching Accuracy",
+      "weight": 0.25,
+      "description": "What the tutor teaches is correct: chess rules, how pieces move and capture, notation, checkmate/stalemate, castling, en passant, promotion, opening principles and tactical ideas explained in general terms. A factual mistake taught to children is serious and must lower this score clearly, scaled by how basic and how repeated it is; a correct, clear explanation raises it. Words that look wrong because of speech-recognition errors are not mistakes. Claims about a specific board position (e.g. 'the best move here is ...') cannot be checked without seeing the board, so do not score them either way.",
+      "evidence_required": "Explanation and correction events with the tutor's own words (quotes). Cite any mistake with its timestamp and say what the correct fact is.",
+      "related_metrics": [],
+      "feedback_themes": [
+        "added by the project owner: correctness of what is taught"
+      ]
+    },
+    {
       "id": "opening_rapport",
-      "name": "Opening and rapport",
-      "weight": 0.15,
+      "name": "Opening And Rapport",
+      "weight": 0.05,
       "description": "Greets the children and builds rapport before starting content; gives new joiners time to introduce themselves; does not jump straight into revision.",
       "evidence_required": "Events from the first ~10 minutes: greetings, introductions, warm-up talk, or their absence before the first explanation/revision.",
-      "related_metrics": ["greeting_or_rapport_in_first_10min", "first_speech_s"],
-      "feedback_themes": ["good intro", "rapport building", "time for new joiners' self-introduction", "directly went to revision without rapport"]
+      "related_metrics": [
+        "greeting_or_rapport_in_first_10min",
+        "first_speech_s"
+      ],
+      "feedback_themes": [
+        "good intro",
+        "rapport building",
+        "time for new joiners' self-introduction",
+        "directly went to revision without rapport"
+      ]
     },
     {
       "id": "individual_engagement",
-      "name": "Individual attention and inclusion",
-      "weight": 0.25,
+      "name": "Individual Attention And Inclusion",
+      "weight": 0.2,
       "description": "Calls on children individually by name, involves every child (not just the most active), checks each child's understanding during puzzles and activities.",
       "evidence_required": "Named questions or check-ins with specific children, spread across the class; how many different children were addressed compared with how many were present.",
-      "related_metrics": ["students_addressed_individually", "students_named_total", "student_turns_per_10min", "student_talk_share"],
-      "feedback_themes": ["one-to-one interaction", "asking questions by calling individually", "consider everyone in the class"]
+      "related_metrics": [
+        "students_addressed_individually",
+        "students_named_total",
+        "student_turns_per_10min",
+        "student_talk_share"
+      ],
+      "feedback_themes": [
+        "one-to-one interaction",
+        "asking questions by calling individually",
+        "consider everyone in the class"
+      ]
     },
     {
       "id": "questioning_interaction",
-      "name": "Questioning and interaction",
+      "name": "Questioning And Interaction",
       "weight": 0.15,
       "description": "Asks questions that make children think (why/how, which move and why), waits for answers, and responds to what children say with correction or follow-up.",
       "evidence_required": "Question events with their type, children's responses, and the teacher's follow-up.",
-      "related_metrics": ["questions_per_10min", "open_question_share", "question_response_rate", "median_wait_time_s"],
-      "feedback_themes": ["interaction was there", "individually ask questions"]
+      "related_metrics": [
+        "questions_per_10min",
+        "open_question_share",
+        "question_response_rate",
+        "median_wait_time_s"
+      ],
+      "feedback_themes": [
+        "interaction was there",
+        "individually ask questions"
+      ]
     },
     {
       "id": "warmth_energy",
-      "name": "Warmth and energy of communication",
+      "name": "Warmth And Energy",
       "weight": 0.15,
       "description": "Pleasant, encouraging, enthusiastic communication judged from WHAT is said: praise, encouragement, patience with mistakes, positive framing, humour, interest in the children. Do NOT judge from pitch, loudness, accent, gender or speaking speed.",
       "evidence_required": "Praise and encouragement events, how mistakes are handled, warm or dismissive remarks, with quotes.",
-      "related_metrics": ["praise_count"],
-      "feedback_themes": ["need more pleasant interaction", "need more energetic communication", "need a better happy interaction with the kids"]
+      "related_metrics": [
+        "praise_count"
+      ],
+      "feedback_themes": [
+        "need more pleasant interaction",
+        "need more energetic communication",
+        "need a better happy interaction with the kids"
+      ]
     },
     {
       "id": "structure_closure",
-      "name": "Lesson structure, closing and homework",
-      "weight": 0.15,
+      "name": "Lesson Structure, Closing And Homework",
+      "weight": 0.1,
       "description": "Clear progression through the lesson, a recap or conclusion at the end, and homework or practice assigned.",
       "evidence_required": "Activity and explanation sequence; recap/conclusion and homework events, especially in the last ~10 minutes.",
-      "related_metrics": ["homework_given", "recap_or_conclusion_in_last_10min"],
-      "feedback_themes": ["given HWs / should give HWs", "need a better conclusion", "can play topic-related videos"]
+      "related_metrics": [
+        "homework_given",
+        "recap_or_conclusion_in_last_10min"
+      ],
+      "feedback_themes": [
+        "given HWs / should give HWs",
+        "need a better conclusion",
+        "can play topic-related videos"
+      ]
     },
     {
       "id": "professional_setup",
-      "name": "Professional setup (camera, 8x8 background, lighting)",
-      "weight": 0.15,
-      "description": "Tutor's camera is on with face visible, the 8x8 branded background (white '88' logo) is used, and the tutor is adequately lit.",
+      "name": "Professional Setup (Camera And 8x8 Background)",
+      "weight": 0.1,
+      "description": "Tutor's camera is on with face visible and the 8x8 branded background (white '88' logo) is used. Judged only from sampled video frames; lighting is not assessed.",
       "evidence_required": "Visual observations from sampled frames. Requires the visual stage; score null without it.",
       "related_metrics": [],
       "requires": "visual",
-      "feedback_themes": ["kept 8x8 background / no background", "camera turned off while teaching", "can't see his face", "sit in a space with light"]
+      "feedback_themes": [
+        "kept 8x8 background / no background",
+        "camera turned off while teaching",
+        "can't see his face",
+        "sit in a space with light"
+      ]
     }
   ],
   "not_observable": [

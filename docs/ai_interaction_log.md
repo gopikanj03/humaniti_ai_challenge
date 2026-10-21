@@ -75,3 +75,52 @@ and repairs truncated JSON to the last complete event, instead of failing the wh
 **Fabrication checks work.** On B552, 21 of 154 extracted events had quotes not found in the transcript and
 were dropped; the judge's evidence is re-checked against event timestamps (2 items dropped).
 First end-to-end result: B552 (human label Good) -> Good, 3.41/5, confidence 0.72.
+
+## Stage 5: visual signals (local only)
+
+**Frames never leave the machine.** Sampled every ~45 s, decoded by ffmpeg straight into memory, analysed
+with OpenCV (YuNet faces, template matching). They contain children's faces and names, so no vision model
+is used; the Groq account offers none anyway.
+
+**8x8 logo detection by template matching.** Template = the right-hand "8" of the branded background, cut
+from one B552 frame (logo only, checked for face overlap). Checked on three tutors:
+
+| Recording | Feedback | Camera-view frames | Match scores | Logo detected |
+|---|---|---|---|---|
+| good/B552 | "fixed 8x8 background" | 7 | 0.35-0.47 / 1.00 | 2 of 7 (from ~6 min on) |
+| excellent/B491 | "background was there" | 17 | 0.34-0.49 / 0.68 | 6 of 17 |
+| quality issue/B392 | "no background" | 16 | 0.39-0.43 | 0 of 16 |
+
+Threshold 0.6 separates all three, but the margin is narrow for B491, whose logo variant matches at only 0.68
+(larger template sizes did not help, so the difference is in the artwork, not the scale). B552's 1.00 matches
+are partly in-sample. The logo is only checkable when the tutor camera is full-size, which is a small share
+of a chess class (most time is screen-shared boards).
+
+**Wording bug that made the judge unfair.** The first observation text ("tutor camera shown large in 7/61")
+led the judge to write "the tutor's face is visible in only 11% of frames". Faces were in fact visible in 84%:
+the tutor is a small tile while screen sharing. Observations now state both numbers and say screen sharing
+is normal; the judge has a rule not to treat it as a fault. B552 professional_setup 2.0 -> 3.0.
+
+**Lighting is deliberately not measured.** Face brightness depends on skin tone and frame brightness on the
+(dark) 8x8 background, so neither is a fair lighting signal; only fully black frames are reported.
+
+## Owner feedback round: teaching accuracy, weights, reports, and a serious prompt bug
+
+**Teaching Accuracy added (owner request), weighted highest (25%).** The judge checks every explanation and
+correction against chess knowledge (rules, piece movement, check/mate/stalemate, castling, en passant,
+promotion, notation, principles), must quote and timestamp any mistake and state the correct fact, ignores
+apparent errors caused by speech recognition, and does not score "best move" claims it cannot verify
+without the board. Opening/rapport weight cut from 15% to 5% at the owner's request.
+
+**The judge was seeing zero events.** After the reviewer-style file and anchors were added, the fixed parts of the
+judge prompt (rubric 968 + metrics 922 + style 357 + anchors 521 + visual 248 tokens) exceeded the 2,970-token
+budget left on the free tier, so all 133 events of a class were trimmed. The judge then cited section ranges
+("09:10-18:20") or "whole class" and labels drifted (good/B435 came out Poor at 0.60). Fixes: compact rubric and
+metric lines, a 56-word style text, one-line anchors, a guaranteed 1,800-token floor for evidence (optional
+context is dropped first, with a warning), transcript evidence spanning more than 2 minutes is rejected, and a
+regression test asserts the judge sees 30+ events under the real budget. The token estimate was also relaxed
+from 3.5 to 4.0 characters per token for Latin text. Result on B552: 50 events shown, style and anchors kept,
+29 specific timestamps, label Good (human Good).
+
+**No raw metric names in output.** A post-processing step rewrites names like
+`recap_or_conclusion_in_last_10min = true` into plain words; the judge is also told not to use them.
