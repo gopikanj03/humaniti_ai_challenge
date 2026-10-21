@@ -134,6 +134,8 @@ h1.app-title {{
 }}
 .stTextInput [data-baseweb="input"] {{ background: transparent !important; border: none !important; }}
 .stTextInput input::placeholder {{ color: var(--muted) !important; }}
+/* One recording at a time: hide Streamlit's "Add files" (+) button; remove the file (x) to choose another. */
+[data-testid="stFileUploader"] button[aria-label="Add files"] {{ display: none !important; }}
 [data-testid="stUploadedFile"], [data-testid="stFileUploaderFile"] {{
   color: var(--text); background: var(--surface-strong) !important; border: 1px solid var(--border); border-radius: 10px;
 }}

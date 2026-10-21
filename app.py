@@ -49,6 +49,7 @@ st.markdown(f'<p class="app-subtitle">{cfg["app"]["subtitle"]}</p>', unsafe_allo
 upload_tab, link_tab = st.tabs(["Upload Video", "Paste Link"])
 with upload_tab:
     upload = st.file_uploader("Class recording", type=[e.lstrip(".") for e in cfg["media"]["allowed_extensions"]],
+                              accept_multiple_files=False,  # one recording per analysis
                               label_visibility="collapsed")
     analyze_file = st.button("Analyze recording", key="analyze_file", disabled=upload is None)
 with link_tab:
