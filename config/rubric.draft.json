@@ -1,0 +1,63 @@
+{
+ "note": "DRAFT from scripts/derive_rubric.py. Weights proportional to how often reviewers mention each dimension's themes. Review before copying anything into config/rubric.json.",
+ "dimensions": [
+  {
+   "id": "professional_setup",
+   "themes": [
+    "8x8 branded background",
+    "Camera on, face visible",
+    "Lighting / video clarity"
+   ],
+   "feedback_mentions": 13,
+   "proposed_weight": 0.24
+  },
+  {
+   "id": "individual_engagement",
+   "themes": [
+    "Asks children individually",
+    "Considers every child"
+   ],
+   "feedback_mentions": 13,
+   "proposed_weight": 0.24
+  },
+  {
+   "id": "opening_rapport",
+   "themes": [
+    "Intro and rapport building",
+    "Time for new joiners to introduce themselves"
+   ],
+   "feedback_mentions": 10,
+   "proposed_weight": 0.18
+  },
+  {
+   "id": "structure_closure",
+   "themes": [
+    "Homework assigned",
+    "Clear conclusion",
+    "Topic-related videos / aids"
+   ],
+   "feedback_mentions": 8,
+   "proposed_weight": 0.15
+  },
+  {
+   "id": "questioning_interaction",
+   "themes": [
+    "Interaction during class"
+   ],
+   "feedback_mentions": 6,
+   "proposed_weight": 0.11
+  },
+  {
+   "id": "warmth_energy",
+   "themes": [
+    "Pleasant, happy, energetic interaction"
+   ],
+   "feedback_mentions": 5,
+   "proposed_weight": 0.09
+  }
+ ],
+ "not_observable": [
+  "Prior warnings about quality"
+ ],
+ "unmatched_phrases": 0
+}

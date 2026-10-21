@@ -48,7 +48,18 @@ def throttle() -> Throttle:
 
 
 class ProviderError(RuntimeError):
-    pass
+    def __init__(self, message: str, code: str = ""):
+        super().__init__(message)
+        self.code = code  # provider error code, e.g. "json_validate_failed" (never message text)
+
+
+def _error_code(resp) -> str:
+    try:
+        err = resp.json().get("error", {})
+        code = err.get("code") or err.get("type") or ""
+    except Exception:
+        return ""
+    return f" ({code})" if isinstance(code, str) and code.replace("_", "").isalnum() else ""
 
 
 def _retry_after(resp: requests.Response) -> float | None:
@@ -80,8 +91,9 @@ def request_with_retry(send: Callable[[], requests.Response]) -> requests.Respon
             if resp.status_code in (401, 403):
                 raise ProviderError(f"provider rejected the API key (HTTP {resp.status_code}); check GROQ_API_KEY")
             if resp.status_code not in RETRY_STATUS or attempt == max_retries:
-                # Error bodies can echo request content; log only the status.
-                raise ProviderError(f"provider returned HTTP {resp.status_code}")
+                # Error bodies can echo request content; report only the status and the error code.
+                raise ProviderError(f"provider returned HTTP {resp.status_code}{_error_code(resp)}",
+                                    code=_error_code(resp).strip(" ()"))
             delay = _retry_after(resp) or min(60, 2 ** attempt) + random.random()
         log.warning("provider call failed (attempt %d/%d); retrying in %.1fs", attempt + 1, max_retries + 1, delay)
         time.sleep(delay)

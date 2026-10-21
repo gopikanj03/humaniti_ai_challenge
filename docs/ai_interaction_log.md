@@ -36,3 +36,42 @@ white "88" logo with "Eight…Eight" text behind the tutor. These are chess clas
 screen-shared lichess.org boards, with the tutor in a small corner tile; the logo is clearly visible only
 when the tutor's camera is full-size. Frames also show children's names on tiles, so frame checks run
 locally (faces blurred before any frame would leave the machine).
+
+## Stage 2: speakers, metrics, digests, judge, scoring
+
+**Speaker separation is only moderately reliable, and we measured it.** WeSpeaker ResNet34 (ONNX via
+sherpa-onnx, no PyTorch) embeddings on 1.5 s windows, agglomerative clustering, largest cluster = teacher.
+Scored against the Zoom VTTs (which know who spoke) on all 12 recordings:
+
+| Threshold | Mean balanced accuracy | Mean teacher-share error |
+|---|---|---|
+| 0.30 | 0.68 | 0.21 |
+| **0.35** | **0.70** | **0.16** |
+| 0.40 | 0.69 | 0.18 |
+
+Per-recording accuracy ranged from 0.94 down to chance (~0.5). Children's voices are outside the
+embedding model's training data and Zoom mixes everyone into one track.
+
+**The first confidence heuristic was wrong, so it was replaced.** Cluster margin/tightness correlated
+*negatively* with accuracy (r = -0.25). Stability, i.e. how much the teacher share moves when re-clustering
+at threshold ±0.05, correlated with accuracy (r = -0.48 between spread and balanced accuracy) and is now the
+confidence, capped at 0.75. Participation metrics carry this reliability into the judge prompt.
+
+**Free-tier limits shaped the LLM stages.** Groq free tier allows 8,000 tokens/min per model, and counts
+`max_completion_tokens` against it, so the first runs failed with HTTP 413. Requests are now budgeted
+(prompt + reply allowance <= 7,500 tokens): long transcript chunks are split, and the judge's event list
+is trimmed by priority.
+
+**A trimming bug made the judge criticise the teacher for our own data gap.** Trimming by priority-then-time
+let 46 early "student_response" events push out all praise events, and the judge wrote "provide more
+explicit praise... data lack specific praise moments". Fixes: event types take turns when trimming, and the
+judge is told that omitted events are not evidence of absence. Warmth went from unscored to 4.0 on the same
+class.
+
+**Small-model JSON drift.** gpt-oss-20b occasionally invented event types, put the speaker in the type field,
+or was cut off at the token limit. The parser now normalises synonyms per event, drops only invalid events,
+and repairs truncated JSON to the last complete event, instead of failing the whole chunk.
+
+**Fabrication checks work.** On B552, 21 of 154 extracted events had quotes not found in the transcript and
+were dropped; the judge's evidence is re-checked against event timestamps (2 items dropped).
+First end-to-end result: B552 (human label Good) -> Good, 3.41/5, confidence 0.72.

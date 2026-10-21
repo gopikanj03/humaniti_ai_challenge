@@ -7,8 +7,18 @@ python-dotenv>=1.0
 faster-whisper>=1.0.3
 yt-dlp>=2025.1.1            # link input: YouTube, Google Drive, Zoom, direct URLs
 
+# Stage 2: speaker separation (ONNX, no PyTorch) and clustering
+numpy>=1.26
+sherpa-onnx>=1.10
+scikit-learn>=1.4
+
 # Stage 5: visual signals (face detection/blurring, frame checks)
 opencv-python-headless>=4.10
+
+# Stage 4 dataset scripts (offline only)
+pypdf>=4.0                  # read data/feedbacks.pdf
+scipy>=1.11                 # Spearman correlations, connected components (also used by scikit-learn)
+pillow>=10.0                # scripts/make_logo.py
 
 # Dev / tests
 pytest>=8.0

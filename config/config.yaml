@@ -1,7 +1,11 @@
 # Central configuration. Model names live here (never in code) because providers
 # retire models. Secrets are NOT stored here; see .env.example.
 
-provider: groq             # organiser-approved hosted provider; env PROVIDER overrides. "groq" | "local"
+app:
+  title: ClassCritique
+  subtitle: Upload a class recording or paste a link to get a quality label with timestamped evidence.
+
+provider: groq            # organiser-approved hosted provider; env PROVIDER overrides. "groq" | "local"
 
 media:
   allowed_extensions: [".mp4", ".mkv", ".mov", ".webm", ".m4a", ".mp3", ".wav"]
@@ -32,6 +36,48 @@ transcription:
     compute_type: int8
     vad_filter: true
 
+models:                    # local model files, fetched on first use and checked by sha256
+  speaker_embedding:
+    path: models/wespeaker_en_voxceleb_resnet34_LM.onnx
+    url: https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet34_LM.onnx
+    sha256: e9848563da86f263117134dfd7ad63c92355b37de492b55e325400c9d9c39012
+
+speakers:
+  window_s: 1.5            # embedding window
+  step_s: 0.75
+  min_region_s: 0.5        # speech regions shorter than this are ignored
+  cluster_threshold: 0.35  # cosine distance; best mean balanced accuracy (0.70) over 12 VTT-checked recordings (scripts/check_speakers.py)
+  teacher_min_fraction: 0.6   # segment is "teacher" if >= this much of it overlaps teacher windows
+  student_max_fraction: 0.4   # "student" if <= this; in between = "mixed"
+
+llm:
+  condense_model: openai/gpt-oss-20b    # fast model: per-chunk event extraction
+  judge_model: openai/gpt-oss-120b      # strongest available: final rubric judgement
+  temperature: 0.2
+  # Groq counts prompt + max_completion_tokens against the per-minute token limit, so each request
+  # must fit max_request_tokens (free tier: 8000 TPM per model). Raise it on a paid tier.
+  max_request_tokens: 7500
+  condense_max_tokens: 3000
+  condense_reasoning_effort: low        # gpt-oss option; null for models that don't support it
+  judge_max_tokens: 3500
+  judge_reasoning_effort: medium
+
+scoring:
+  rubric: config/rubric.json
+  # Weighted 0-5 score -> label. A score >= the value gets that label (highest match wins).
+  # Placeholders until scripts/calibrate.py tunes them on the labelled set.
+  thresholds:
+    Poor: 0.0
+    Average: 2.25
+    Good: 3.0
+    Excellent: 3.75
+  # Missing-dimension policy (see scoring.py): weights of unscored dimensions are redistributed over
+  # scored ones and confidence is scaled by the covered weight; below min_weight_coverage the result
+  # is flagged low-confidence.
+  min_weight_coverage: 0.6
+  low_confidence_below: 0.5
+  no_evidence_label: Poor   # label when nothing could be scored (confidence 0); see scoring.py
+
 groq:
   base_url: https://api.groq.com/openai/v1
   requests_per_minute: 20
@@ -39,7 +85,9 @@ groq:
   timeout_s: 300
 
 cache:
-  enabled: true
+  read: true               # reuse results that already exist (e.g. from development runs)
+  write: false             # the app never saves a new recording's transcript/results to disk;
+                           # offline dataset scripts turn this on via cache.enable_writes()
   dir: data/cache          # gitignored; holds transcripts, so it stays local
 
 logging:

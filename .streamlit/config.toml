@@ -4,3 +4,11 @@ maxUploadSize = 1024
 
 [browser]
 gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+# Base colours only; fonts, dark mode and the background come from src/ui_theme.py.
+base = "light"
+primaryColor = "#8B7CF6"

@@ -1,97 +1,118 @@
-"""Streamlit UI. Stage 1: upload -> validate -> transcribe, with progress by stage."""
+"""ClassCritique: Streamlit UI. Upload a recording or paste a link, then see the label and evidence."""
 from __future__ import annotations
 
+import base64
 import os
 import tempfile
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from src import pipeline
 from src.config import ConfigError, get_config, setup_logging
+from src.llm import LLMOutputError
 from src.media import MediaError
 from src.net import ProviderError
-from src.transcribe import model_name
+from src import ui_results as ui
+from src.ui_theme import background_js, css
 
 setup_logging()
 cfg = get_config()
+TITLE = cfg["app"]["title"]
+ASSETS = Path(__file__).parent / "assets"
+LOGO_B64 = base64.b64encode((ASSETS / "logo.png").read_bytes()).decode()
 
-st.set_page_config(page_title="Class Recording Assessment", layout="wide")
-st.title("Class Recording Assessment")
-st.caption("Upload an online class recording to get a quality label with timestamped evidence.")
+st.set_page_config(page_title=TITLE, page_icon=str(ASSETS / "logo.png"), layout="centered", initial_sidebar_state="collapsed")
 
-with st.sidebar:
-    st.subheader("Processing")
-    st.write(f"**Provider:** `{cfg['provider']}`")
-    st.write(f"**Transcription model:** `{model_name(cfg['provider'])}`")
-    if cfg["provider"] == "local":
-        st.info("Local mode: audio never leaves this machine.")
-    else:
-        st.warning("Hosted mode: audio is sent to the configured provider.")
+# ---------------------------------------------------------------- theme
+if "dark" not in st.session_state:
+    st.session_state.dark = False
+_, toggle_col = st.columns([5, 1])
+with toggle_col:
+    st.toggle("Dark", key="dark")
+theme = "dark" if st.session_state.dark else "light"
+st.markdown(css(theme), unsafe_allow_html=True)
+components.html(background_js(theme), height=0)
 
-source = st.radio("Recording source", ["Upload file", "Paste link"], horizontal=True, label_visibility="collapsed")
-upload, link = None, ""
-if source == "Upload file":
-    upload = st.file_uploader("Class recording", type=[e.lstrip(".") for e in cfg["media"]["allowed_extensions"]])
-else:
-    link = st.text_input("Link to the recording", placeholder="YouTube, Google Drive, Zoom cloud recording, or a direct video URL")
-    st.caption("Private links must be shared as 'Anyone with the link can view'.")
-ready = upload is not None or bool(link.strip())
-analyze = st.button("Analyze", type="primary", disabled=not ready)
+# ---------------------------------------------------------------- header
+st.markdown(f'<div class="app-brand"><img class="app-logo" alt="" src="data:image/png;base64,{LOGO_B64}">'
+            f'<h1 class="app-title">{TITLE}</h1></div>', unsafe_allow_html=True)
+st.markdown(f'<p class="app-subtitle">{cfg["app"]["subtitle"]}</p>', unsafe_allow_html=True)
 
-if analyze and ready:
+# ---------------------------------------------------------------- input
+upload_tab, link_tab = st.tabs(["⬆  Upload video", "🔗  Paste link"])
+with upload_tab:
+    upload = st.file_uploader("Class recording", type=[e.lstrip(".") for e in cfg["media"]["allowed_extensions"]],
+                              label_visibility="collapsed")
+    analyze_file = st.button("Analyze recording", key="analyze_file", disabled=upload is None)
+with link_tab:
+    link = st.text_input("Link to the recording", label_visibility="collapsed",
+                         placeholder="Paste a YouTube, Google Drive, Zoom cloud recording or direct video link")
+    st.caption("Private links must be shared as “Anyone with the link can view”.")
+    analyze_link = st.button("Analyze link", key="analyze_link", disabled=not link.strip())
+
+st.markdown('<p class="app-note">Recordings are processed only by the approved provider and deleted '
+            'after analysis. Children are referred to as Student 1, Student 2, …</p>', unsafe_allow_html=True)
+
+
+def analyze(tmp_path: str | None, url: str | None) -> None:
+    tracker = st.empty()
+    is_link = tmp_path is None
+    state = {"stage": "Downloading" if is_link else "Validating file"}
+
+    def on_stage(stage: str, frac: float) -> None:
+        # Streamlit can only draw from the script thread; ignore progress reported by worker threads.
+        if stage == "Done" or get_script_run_ctx() is None:
+            return
+        state["stage"] = stage
+        tracker.markdown(ui.progress_html(stage, frac, is_link), unsafe_allow_html=True)
+
+    on_stage(state["stage"], 0.0)
+    result = pipeline.run(tmp_path, on_stage=on_stage) if tmp_path else pipeline.run(url=url, on_stage=on_stage)
+    tracker.markdown(ui.progress_html("", 1.0, is_link, done=True), unsafe_allow_html=True)
+    st.session_state["result"] = result
+
+
+if (analyze_file and upload is not None) or (analyze_link and link.strip()):
+    st.session_state.pop("result", None)
     tmp_path = None
     try:
-        if upload is not None:
+        if analyze_file:
             # Write the upload to a private temp file; removed in `finally` even if the pipeline fails.
             fd, tmp_path = tempfile.mkstemp(prefix="upload_", suffix=Path(upload.name).suffix.lower())
             with os.fdopen(fd, "wb") as f:
                 f.write(upload.getbuffer())
-
-        with st.status("Analyzing recording...", expanded=True) as status:
-            bar = st.progress(0.0)
-            last = {"stage": None}
-
-            def on_stage(stage: str, frac: float) -> None:
-                if stage != last["stage"]:
-                    st.write(f"• {stage}")
-                    last["stage"] = stage
-                bar.progress(min(max(frac, 0.0), 1.0), text=stage)
-
-            if tmp_path:
-                result = pipeline.run(tmp_path, on_stage=on_stage)
-            else:
-                result = pipeline.run(url=link, on_stage=on_stage)
-            status.update(label="Analysis complete", state="complete", expanded=False)
-        st.session_state["result"] = result
+        analyze(tmp_path, None if analyze_file else link)
     except MediaError as e:
-        st.error(f"Recording problem: {e}")
+        st.error(f"**Recording problem.** {e}")
     except ConfigError as e:
-        st.error(f"Configuration problem: {e}")
+        st.error(f"**Configuration problem.** {e}")
     except ProviderError as e:
-        st.error(f"The transcription provider failed: {e}. Try again later or switch PROVIDER=local.")
+        if "429" in str(e) or "413" in str(e):
+            st.warning("**The free-tier rate limit was reached.** Work done so far is saved, so clicking "
+                       "Analyze again in a few minutes continues where it stopped.")
+        else:
+            st.error(f"**The AI provider failed** ({e}). Please try again in a minute; finished steps are saved.")
+    except LLMOutputError:
+        st.error("**The assessment model returned an unusable answer twice.** Please try again.")
     except Exception as e:  # last resort: show type only, never content
-        st.error(f"Unexpected error ({type(e).__name__}). Check the server log.")
+        st.error(f"**Unexpected error** ({type(e).__name__}). Check the server log.")
         raise
     finally:
         if tmp_path:
             Path(tmp_path).unlink(missing_ok=True)
 
+# ---------------------------------------------------------------- results
 result = st.session_state.get("result")
-if result is not None:
-    summary = pipeline.summarize(result)
-    c0, c1, c2, c3, c4 = st.columns(5)
-    c0.metric("Language", summary["language"] or "unknown")
-    c1.metric("Duration", f"{summary['duration_min']} min")
-    c2.metric("Segments", f"{summary['usable_segments']} / {summary['segments']}", help="usable / total")
-    c3.metric("Speech coverage", f"{summary['speech_coverage']:.0%}")
-    c4.metric("Peak level", f"{summary['peak_dbfs']:.0f} dBFS")
-
-    for w in result.warnings:
-        st.warning(w)
-
-    with st.expander("Transcript preview (shown here only, never logged)"):
-        for s in result.transcript.segments:
-            mm, ss = divmod(int(s.start), 60)
-            marker = " ⚠️ low confidence" if s.flagged else ""
-            st.markdown(f"`{mm:02d}:{ss:02d}` {s.text}{marker}")
+if result is not None and result.result is not None:
+    st.markdown(ui.hero_html(result), unsafe_allow_html=True)
+    st.markdown(ui.strengths_html(result), unsafe_allow_html=True)
+    st.markdown(ui.dimensions_html(result), unsafe_allow_html=True)
+    st.markdown('<h2 class="cc-h2">How this was assessed</h2>', unsafe_allow_html=True)
+    st.markdown(ui.signals_html(result), unsafe_allow_html=True)
+    with st.expander("Computed metrics"):
+        st.markdown(ui.metrics_html(result), unsafe_allow_html=True)
+    st.download_button("⬇  Download report (JSON)", ui.report_json(result), file_name="classcritique_report.json",
+                       mime="application/json", help="Assessment and metrics only; no transcript.")

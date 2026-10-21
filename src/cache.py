@@ -1,4 +1,10 @@
-"""Per-stage JSON cache keyed by file hash. Lives under data/ (gitignored)."""
+"""Per-stage JSON cache keyed by file hash. Lives under data/ (gitignored).
+
+Policy (agreed with the project owner): the app never WRITES to the cache, so a newly uploaded
+recording or link leaves no transcript or results on disk. It may READ entries that already exist
+(e.g. from development runs). Offline dataset scripts call `enable_writes()` so long batch runs on
+the free tier can resume after rate limits.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -23,8 +29,13 @@ def _path(file_hash: str, stage: str) -> Path:
     return Path(get_config()["cache"]["dir"]) / file_hash[:16] / f"{safe}.json"
 
 
+def enable_writes() -> None:
+    """For offline dataset scripts only: allow results to be saved so batch runs can resume."""
+    get_config()["cache"]["write"] = True
+
+
 def load(file_hash: str, stage: str) -> Any | None:
-    if not get_config()["cache"]["enabled"]:
+    if not get_config()["cache"]["read"]:
         return None
     p = _path(file_hash, stage)
     if not p.exists():
@@ -36,7 +47,7 @@ def load(file_hash: str, stage: str) -> Any | None:
 
 
 def save(file_hash: str, stage: str, data: Any) -> None:
-    if not get_config()["cache"]["enabled"]:
+    if not get_config()["cache"]["write"]:
         return
     p = _path(file_hash, stage)
     p.parent.mkdir(parents=True, exist_ok=True)
