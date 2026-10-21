@@ -1,0 +1,17 @@
+# Never ship private data, secrets or local caches in the image.
+data/
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.git/
+.claude/
+*.log
+assets/logo_source.png
+models/wespeaker_*.onnx
+config/anchors*.json
+config/style*.json

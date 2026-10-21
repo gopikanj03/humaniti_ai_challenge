@@ -56,8 +56,8 @@ visual:
   max_frames: 120
   frame_width: 960           # frames are downscaled in memory; never written to disk
   camera_face_min_height: 0.18   # a face this tall (share of frame height) = tutor camera shown large
-  logo_template: assets/8x8_logo_template.png   # right-hand "8" of the 8x8 background, cut from a 1920 px frame
-  logo_threshold: 0.6        # checked on 3 tutors: no-logo frames <= 0.49, logo frames 0.68-1.00 (narrow margin)
+  logo_template: assets/8x8_logo_template*.png  # one template per 8x8 background version, cut from 1920 px frames
+  logo_threshold: 0.6        # 5 classes, 3 templates: logo frames 0.98-1.00, no-logo frames <= 0.52
   logo_scales: [0.6, 0.75, 0.9, 1.0, 1.15, 1.3]
   static_diff: 2.0           # mean abs grey-level change below this between samples = unchanged screen
   near_black_mean: 18        # mean grey level below this = black frame (camera covered / video off)
@@ -98,6 +98,27 @@ scoring:
   min_weight_coverage: 0.6
   low_confidence_below: 0.5
   no_evidence_label: Poor   # label when nothing could be scored (confidence 0); see scoring.py
+
+# Strict rules (owner request). Applied in Python after the weighted score: the final label is the LOWEST
+# of the score-based label and every rule that fires. A rule only fires on a measured value (never on n/a).
+rules:
+  enabled: true
+  quality:                        # recording's technical quality: any breach -> Poor ("recording quality issue")
+    min_video_height: 360         # pixels
+    min_median_sharpness: 100     # our 1080p class videos measure 1,200-1,900; below 100 is clearly blurry
+    max_frozen_s: 450             # ~10 identical samples in a row
+    max_black_share: 0.30         # share of fully black frames
+    min_transcription_clarity: 0.50
+    max_unclear_speech_share: 0.25
+    min_speech_ratio: 0.15        # share of the recording with audible speech
+  teaching:
+    errors_cap_average: 1         # this many teaching mistakes -> at most Average
+    errors_poor: 3                # this many -> Poor
+    min_face_visible_share: 0.25  # below -> Poor (camera off / face not visible most of the class)
+    min_checked_camera_frames: 3  # 8x8 background rule needs at least this many full-size camera frames
+    min_questions_per_10min: 2.0  # below -> at most Average
+    min_praise: 2                 # below -> at most Average
+    average_caps_to_poor: 3       # this many "at most Average" rules broken -> Poor
 
 groq:
   base_url: https://api.groq.com/openai/v1

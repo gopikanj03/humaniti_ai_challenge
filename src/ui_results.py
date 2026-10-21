@@ -109,7 +109,7 @@ html,body{{margin:0;background:transparent;font-family:'Plus Jakarta Sans',syste
 .row{{color:{palette['muted']};font-size:13.5px;padding:2px 2px;}}
 .tip{{transition:opacity .5s;}}
 </style></head><body>
-<div class="row">A 45–60 min class usually takes 3–4 minutes.</div>
+<div class="row">A 45–60 min class usually takes about 5–7 minutes.</div>
 <div class="row"><span class="tip" id="tip">Tip: {escape(TIPS[0])}</span></div>
 <script>
 const tips = {tips};
@@ -147,12 +147,20 @@ def hero_html(res: PipelineResult) -> str:
     conf_word = _confidence_word(r.confidence)
     lang = s["language"] or "unknown"
     reasons = "".join(f"<li>{escape(x)}</li>" for x in r.confidence_reasons)
+    rules = ""
+    if r.rules_applied:
+        lowered = r.score_label and r.score_label != r.label
+        head = (f"Label set to {escape(r.label)} by required standards (score alone: {escape(r.score_label)})"
+                if lowered else "Required standards not met")
+        items = "".join(f"<li>{escape(x)}</li>" for x in r.rules_applied)
+        rules = f'<div class="cc-rules"><div class="cc-rules-head">{head}</div><ul>{items}</ul></div>'
+    badge = '<div class="cc-qi">Recording quality issue</div>' if r.quality_issue else ""
     low = (f'<div class="cc-banner">Low confidence: treat this label as provisional. '
            f'{escape(" ".join(r.confidence_reasons))}</div>') if r.low_confidence else ""
     return _compact(f"""
 <div class="cc-card cc-hero" style="--label:{colour}">
 <div class="cc-hero-main">
-<div class="cc-label-wrap"><div class="cc-kicker">Overall label</div><div class="cc-label">{escape(r.label)}</div></div>
+<div class="cc-label-wrap"><div class="cc-kicker">Overall label</div><div class="cc-label">{escape(r.label)}</div>{badge}</div>
 <div class="cc-hero-stats">
 <div class="cc-stat"><div class="cc-kicker">Score</div><div class="cc-stat-value">{r.score:.2f}<span>/5</span></div>
 <div class="cc-scorebar"><div style="width:{r.score / 5 * 100:.0f}%"></div></div></div>
@@ -163,6 +171,7 @@ def hero_html(res: PipelineResult) -> str:
 <div class="cc-meta"><span>{s['duration_min']} min</span><span>{escape(lang)}</span><span>{s['events']} moments analysed</span>
 <span>{r.weight_coverage:.0%} of rubric scored</span></div>
 <p class="cc-summary">{escape(a.summary)}</p>
+{rules}
 {low}
 {f'<details class="cc-reasons"><summary>Why This Confidence?</summary><ul>{reasons}</ul></details>' if reasons else ''}
 </div>""")

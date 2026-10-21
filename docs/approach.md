@@ -112,4 +112,4 @@ Feedback coverage on two recordings: 5/7 human themes covered; 29/29 evidence it
 - Speaker separation: a child-voice-aware embedding model, or Zoom's per-speaker audio where available, would
   make participation metrics more trustworthy.
 - Visual: a second logo template (B491's variant) would widen the detection margin.
-- Free tier: one class takes 3–4 minutes; a paid tier or batching would cut this to about a minute.
+- Free tier: one class takes about 5–7 minutes (summaries are rate-limited); a paid tier would cut this to about a minute.

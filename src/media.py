@@ -49,7 +49,7 @@ def validate(path: str | Path) -> MediaInfo:
         raise MediaError(f"File is {size_mb:.0f} MB; the limit is {cfg['max_upload_mb']} MB.")
 
     proc = _run([_bin("ffprobe"), "-v", "error", "-show_entries",
-                 "format=duration,format_name:stream=codec_type", "-of", "json", str(path)], timeout=120)
+                 "format=duration,format_name:stream=codec_type,width,height", "-of", "json", str(path)], timeout=120)
     if proc.returncode != 0:
         raise MediaError("The file could not be read as audio/video (corrupt or not a media file).")
     try:
@@ -72,8 +72,10 @@ def validate(path: str | Path) -> MediaInfo:
     if proc.returncode != 0:
         raise MediaError("The audio track could not be decoded; the file may be corrupt or truncated.")
 
+    video = next((s for s in meta.get("streams", []) if s.get("codec_type") == "video"), {})
     return MediaInfo(duration_s=duration, has_video="video" in streams, has_audio=True,
-                     size_mb=round(size_mb, 1), container=meta["format"].get("format_name", ""))
+                     size_mb=round(size_mb, 1), container=meta["format"].get("format_name", ""),
+                     width=video.get("width"), height=video.get("height"))
 
 
 def extract_audio(src: str | Path, out_dir: str | Path) -> Path:

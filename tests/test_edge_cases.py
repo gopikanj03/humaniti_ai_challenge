@@ -153,7 +153,8 @@ def test_repeat_run_reuses_existing_results(monkeypatch, tmp_path):
 
 MEDIA_EXT = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4a", ".mp3", ".wav", ".flac", ".ogg", ".opus",
              ".jpg", ".jpeg", ".vtt", ".srt", ".pdf"}
-ALLOWED = {"assets/logo.png", "assets/8x8_logo_template.png"}
+ALLOWED = {"assets/logo.png", "assets/8x8_logo_template.png", "assets/8x8_logo_template_2.png",
+           "assets/8x8_logo_template_3.png"}  # logo-only crops, checked for faces when cut
 
 
 def _tracked_files() -> list[str]:

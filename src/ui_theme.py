@@ -240,6 +240,16 @@ code {{ background: color-mix(in srgb, var(--accent) 14%, transparent) !importan
   margin-top: 0.9rem; padding: 0.75rem 1rem; border-radius: 12px; font-size: 0.9rem;
   background: color-mix(in srgb, var(--accent-4) 28%, transparent); border: 1px solid color-mix(in srgb, var(--accent-4) 60%, transparent);
 }}
+.cc-rules {{
+  margin-top: 0.9rem; padding: 0.75rem 1rem; border-radius: 12px; font-size: 0.9rem;
+  background: color-mix(in srgb, var(--accent-2) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent);
+}}
+.cc-rules-head {{ font-weight: 700; margin-bottom: 0.3rem; }}
+.cc-rules ul {{ margin: 0; padding-left: 1.1rem; }}
+.cc-qi {{
+  display: inline-block; margin-top: 0.45rem; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem;
+  border-radius: 99px; background: color-mix(in srgb, var(--accent-2) 30%, transparent); color: var(--text);
+}}
 .cc-reasons {{ margin-top: 0.7rem; font-size: 0.88rem; color: var(--muted); }}
 .cc-reasons summary {{ cursor: pointer; font-weight: 600; }}
 /* evidence */

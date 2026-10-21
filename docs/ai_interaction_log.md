@@ -124,3 +124,22 @@ from 3.5 to 4.0 characters per token for Latin text. Result on B552: 50 events s
 
 **No raw metric names in output.** A post-processing step rewrites names like
 `recap_or_conclusion_in_last_10min = true` into plain words; the judge is also told not to use them.
+
+## Labels did not match: strict rules, recording quality, logo variants
+
+**Owner's test showed the labels were wrong too often** (e.g. quality issue/B392, labelled Poor, came out Good).
+Diagnosis: the weighted average let a class that is weak in one area average out to Good; the judge used only
+3-4/5 for most classes; cut-offs were uncalibrated; and some of what drives 8x8's labels (tone of voice, history)
+is deliberately not measured.
+
+**Strict rules added (owner request)**, applied in Python after the score and only able to lower the label:
+recording-quality checks (resolution, blur, frozen or black video, unclear audio, too little speech) make the
+class Poor and flag a "recording quality issue"; teaching standards (teaching mistakes, no homework and no recap,
+face not visible, no 8x8 background, too few questions, too little praise) cap the label, and breaking three of
+them makes it Poor. The judge now returns a separate, evidence-checked list of teaching mistakes.
+
+**The background rule exposed a logo-detection miss.** excellent/B472 (logo clearly visible) scored 0.50 against
+the single template; tutors use slightly different versions of the 8x8 background. Two more logo-only templates
+(from B472 and B491, face-checked) fixed it: logo frames now score 0.98-1.00 and no-logo frames at most 0.52 across
+five classes, and B392 ("no background") stays at 0 of 16. Without this fix the new rule would have wrongly
+capped two classes (B472, average/B435).

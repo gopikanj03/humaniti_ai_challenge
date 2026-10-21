@@ -31,6 +31,8 @@ class FrameObs(BaseModel):
     logo: float | None = None    # best template match (only checked in camera-view frames)
     near_black: bool = False
     changed: bool | None = None  # vs the previous sample; None for the first
+    identical: bool | None = None  # pixel-identical to the previous sample (frozen video)
+    sharpness: float | None = None  # variance of the Laplacian: low = blurry
 
 
 class VisualResult(BaseModel):
@@ -67,13 +69,14 @@ def grab_frame(video: str | Path, t: float, width: int) -> np.ndarray | None:
 class LogoMatcher:
     def __init__(self, frame_width: int):
         vcfg = get_config()["visual"]
-        path = ROOT / vcfg["logo_template"]
-        tmpl = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
-        self.available = tmpl is not None
-        base = frame_width / 1920  # the template was cut from a 1920 px wide frame
-        self.templates = [] if tmpl is None else [
-            cv2.resize(tmpl, None, fx=base * s, fy=base * s, interpolation=cv2.INTER_AREA)
-            for s in vcfg["logo_scales"]]
+        # Several templates: tutors use slightly different versions of the 8x8 background (proportions,
+        # shading), and one template missed some of them. The best match over all templates is used.
+        paths = sorted(ROOT.glob(vcfg["logo_template"]))
+        tmpls = [t for t in (cv2.imread(str(p), cv2.IMREAD_GRAYSCALE) for p in paths) if t is not None]
+        self.available = bool(tmpls)
+        base = frame_width / 1920  # templates were cut from 1920 px wide frames
+        self.templates = [cv2.resize(t, None, fx=base * s, fy=base * s, interpolation=cv2.INTER_AREA)
+                          for t in tmpls for s in vcfg["logo_scales"]]
 
     def score(self, gray: np.ndarray) -> float:
         best = 0.0
@@ -111,12 +114,15 @@ def analyse(video: str | Path, duration: float) -> VisualResult:
         camera = largest >= vcfg["camera_face_min_height"]
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         small = cv2.resize(gray, (160, 90), interpolation=cv2.INTER_AREA).astype(np.float32)
-        changed = None if prev_small is None else float(np.abs(small - prev_small).mean()) >= vcfg["static_diff"]
+        diff = None if prev_small is None else float(np.abs(small - prev_small).mean())
+        changed = None if diff is None else diff >= vcfg["static_diff"]
+        identical = None if diff is None else diff < 0.2
         prev_small = small
         frames.append(FrameObs(
             t=t, faces=len(heights), largest_face=round(largest, 3), camera_view=camera,
             logo=round(matcher.score(gray), 2) if camera and matcher.available else None,
-            near_black=float(gray.mean()) < vcfg["near_black_mean"], changed=changed))
+            near_black=float(gray.mean()) < vcfg["near_black_mean"], changed=changed, identical=identical,
+            sharpness=round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 1)))
     res = VisualResult(interval_s=vcfg["interval_s"], frames=frames, vision_model_status=vision_model_status())
     if not matcher.available:
         res.warnings.append("8x8 logo template missing; background check skipped.")
@@ -157,6 +163,10 @@ def _summarise(res: VisualResult, logo_available: bool) -> None:
                note="fully black frames (camera covered / video off). Lighting quality is not measured"),
         Metric(name="static_screen_share", value=round(len(static) / max(n - 1, 1), 2), source="visual",
                reliability=rel, note="screen unchanged between consecutive samples; not a fault by itself"),
+        Metric(name="median_sharpness", value=_median([f.sharpness for f in fr]), source="visual", reliability=rel,
+               note="recording quality: low values mean a blurry video"),
+        Metric(name="longest_frozen_s", value=round(_longest_run(fr) * res.interval_s), unit="s", source="visual",
+               reliability=rel, note="recording quality: longest stretch of pixel-identical frames (frozen video)"),
     ]
     obs = [f"Sampled {n} frames, one every ~{res.interval_s:.0f} s (moments, not continuous video).",
            f"A face is visible in {n - len(no_face)}/{n} sampled frames. The tutor camera is shown full-size in "
@@ -173,6 +183,20 @@ def _summarise(res: VisualResult, logo_available: bool) -> None:
     for f in black[:5]:
         obs.append(f"[{_fmt(f.t)}] frame is black (camera covered or video off).")
     res.observations = obs
+
+
+def _median(values: list[float | None]) -> float | None:
+    vals = sorted(v for v in values if v is not None)
+    return round(vals[len(vals) // 2], 1) if vals else None
+
+
+def _longest_run(frames: list[FrameObs]) -> int:
+    """Longest run of consecutive samples identical to the one before (number of frozen intervals)."""
+    best = cur = 0
+    for f in frames:
+        cur = cur + 1 if f.identical else 0
+        best = max(best, cur)
+    return best
 
 
 def _runs(frames: list[FrameObs], cond, min_len: int) -> list[tuple[float, float]]:

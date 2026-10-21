@@ -233,6 +233,9 @@ def run(src_path: str | Path | None = None, on_stage: StageFn | None = None, *,
 
         notify("Computing metrics", 0.0, "Counting questions, answers, praise and talk time")
         metrics = compute_all(transcript, spk, digests) + (vis.metrics if vis else [])
+        if info.height:
+            metrics.append(Metric(name="video_height", value=info.height, unit="px", source="visual",
+                                  note="recording quality: vertical resolution"))
 
         meta = {"duration": f"{info.duration_s / 60:.0f} min",
                 "language": LANGUAGE_NAMES.get(transcript.language, transcript.language) or "unknown",
@@ -247,7 +250,7 @@ def run(src_path: str | Path | None = None, on_stage: StageFn | None = None, *,
                 dimensions=[DimensionScore(dimension=d["id"]) for d in scoring.load_rubric()["dimensions"]],
                 limitations=["No usable speech: muted, silent or unintelligible audio."], confidence=0.0)
 
-        result = scoring.score(assessment, quality=_quality_factors(transcript, spk, digests, metrics))
+        result = scoring.score(assessment, quality=_quality_factors(transcript, spk, digests, metrics), metrics=metrics)
         notify("Done", 1.0)
         out = PipelineResult(file_hash=file_hash, media=info, audio_levels=levels, transcript=transcript,
                              speakers=spk, visual=vis, digests=digests, metrics=metrics, assessment=assessment,

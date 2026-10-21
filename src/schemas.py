@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field, field_validator
 class MediaInfo(BaseModel):
     duration_s: float
     has_video: bool
+    width: int | None = None
+    height: int | None = None
     has_audio: bool
     size_mb: float
     container: str
@@ -129,6 +131,7 @@ class Assessment(BaseModel):
     strengths: list[EvidenceItem] = Field(default_factory=list)
     improvements: list[EvidenceItem] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+    teaching_errors: list[EvidenceItem] = Field(default_factory=list)  # factual mistakes the tutor taught
     confidence: float = Field(ge=0, le=1)
 
 
@@ -140,3 +143,6 @@ class ScoreResult(BaseModel):
     weight_coverage: float                     # share of rubric weight that had a score
     missing_dimensions: list[str] = Field(default_factory=list)
     confidence_reasons: list[str] = Field(default_factory=list)
+    score_label: str | None = None             # label from the weighted score alone, before rules
+    rules_applied: list[str] = Field(default_factory=list)   # strict rules that lowered the label, with reasons
+    quality_issue: bool = False                # recording's technical quality is too poor to assess fairly

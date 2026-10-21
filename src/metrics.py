@@ -31,6 +31,7 @@ METRIC_LABELS = {
     "face_visible_share": "Face visible (any size)", "no_face_share": "No face detected",
     "logo_in_camera_view_share": "8x8 background (camera frames)", "near_black_frame_share": "Black frames",
     "static_screen_share": "Screen unchanged between samples",
+    "median_sharpness": "Video sharpness", "longest_frozen_s": "Longest frozen video", "video_height": "Video resolution",
 }
 
 

@@ -29,7 +29,8 @@ def report_data(res: PipelineResult) -> dict:
         "recording": {"duration_min": s["duration_min"], "language": s["language"] or "unknown"},
         "result": {"label": r.label, "score": r.score, "confidence": r.confidence,
                    "confidence_level": _confidence_word(r.confidence), "low_confidence": r.low_confidence,
-                   "confidence_reasons": r.confidence_reasons, "rubric_scored": r.weight_coverage},
+                   "confidence_reasons": r.confidence_reasons, "rubric_scored": r.weight_coverage,
+                   "score_label": r.score_label, "rules_applied": r.rules_applied, "quality_issue": r.quality_issue},
         "summary": a.summary,
         "strengths": [e.model_dump() for e in a.strengths],
         "improvements": [e.model_dump() for e in a.improvements],
@@ -97,6 +98,15 @@ def to_pdf(data: dict) -> bytes:
     pdf.set_text_color(*text_col)
     pdf.cell(0, 10, _latin1(f"Overall Label: {r['label']}"), new_x="LMARGIN", new_y="NEXT")
     para(f"Score {r['score']:.2f} / 5    Confidence {r['confidence']:.0%} ({r['confidence_level']})", "B", 11)
+    if r["quality_issue"]:
+        para("Recording quality issue", "B", 11)
+    if r["rules_applied"]:
+        lowered = r["score_label"] and r["score_label"] != r["label"]
+        heading("Required Standards Not Met", 12)
+        if lowered:
+            para(f"Label set to {r['label']} by required standards (score alone: {r['score_label']}).", "I", 10, muted)
+        for x in r["rules_applied"]:
+            item("", x)
     if r["low_confidence"]:
         para("Low confidence: treat this label as provisional.", "I", 10, muted)
     for x in r["confidence_reasons"]:

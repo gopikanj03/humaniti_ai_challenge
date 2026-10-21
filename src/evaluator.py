@@ -20,7 +20,7 @@ from .schemas import Assessment, ChunkDigest, DimensionScore, Event, EvidenceIte
 from .scoring import load_rubric
 
 log = logging.getLogger(__name__)
-PROMPT_VERSION = "judge-v7"
+PROMPT_VERSION = "judge-v8"
 EVIDENCE_TOLERANCE_S = 20.0
 
 DEFAULT_STYLE = """Write like an experienced 8x8 class reviewer: short, specific, practical. Each observation
@@ -70,7 +70,11 @@ Return JSON:
                                "observation": "specific, factual", "source": "transcript" | "metric" | "visual"}]}],
  "strengths": [<evidence items>], "improvements": [<evidence items>],
  "limitations": ["what could not be assessed and why"],
+ "teaching_errors": [{"timestamp": "mm:ss", "observation": "what the tutor said, and the correct fact",
+                      "source": "transcript"}],
  "confidence": 0-1}
+List in "teaching_errors" every factual chess mistake the tutor taught (empty list if none). Only real
+mistakes in what was taught, never speech-recognition noise or unverifiable board-specific claims.
 Include every rubric dimension exactly once."""
 
 
@@ -265,6 +269,8 @@ def verify(assessment: Assessment, digests: list[ChunkDigest], has_visual: bool,
         dims.append(d.model_copy(update={"score": score, "evidence": evidence}))
     strengths, n1 = _filter(assessment.strengths, event_times, has_visual, vtimes)
     improvements, n2 = _filter(assessment.improvements, event_times, has_visual, vtimes)
+    errors, _ = _filter(assessment.teaching_errors, event_times, has_visual, vtimes)
+    errors = [ev for ev in errors if ev.source == "transcript"]  # a mistake must be something the tutor said
     limitations = list(assessment.limitations)
     if dropped + n1 + n2:
         limitations.append(f"{dropped + n1 + n2} evidence item(s) were removed because they did not match any "
@@ -276,7 +282,8 @@ def verify(assessment: Assessment, digests: list[ChunkDigest], has_visual: bool,
     improvements = [ev.model_copy(update={"observation": humanize(ev.observation)}) for ev in improvements]
     return assessment.model_copy(update={"summary": humanize(assessment.summary), "dimensions": dims,
                                          "strengths": strengths, "improvements": improvements,
-                                         "limitations": [humanize(x) for x in limitations]}), dropped + n1 + n2
+                                         "limitations": [humanize(x) for x in limitations],
+                                         "teaching_errors": errors}), dropped + n1 + n2
 
 
 def evaluate(digests: list[ChunkDigest], metrics: list[Metric], meta: dict, file_hash: str,

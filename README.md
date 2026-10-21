@@ -1,3 +1,13 @@
+---
+title: ClassCritique
+colorFrom: purple
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+short_description: Quality label and timestamped evidence for class recordings
+---
+
 # ClassCritique
 
 Assesses a recorded online chess class for children (8x8) and returns **one label** (Poor / Average /
@@ -31,6 +41,21 @@ video / link ─► validate (ffmpeg) ─┬─► audio ─► Whisper (Groq) �
 | Judge | `src/evaluator.py` | One call with rubric, metrics, digests, visual notes, reviewer style and anchors; Pydantic-validated JSON; evidence re-checked against real moments |
 | Score | `src/scoring.py` | Python computes the weighted score and label; missing dimensions are re-weighted and lower confidence |
 | UI | `app.py`, `src/ui_*.py` | Streamlit: upload or link, progress by stage, result card, evidence per dimension, signals used/missing |
+
+### Strict rules (applied after the score; they can only lower the label)
+
+| Rule | Effect |
+|---|---|
+| Recording quality: resolution < 360p, blurry video, frozen video (~7.5 min), > 30% black frames, unclear audio, < 15% audible speech | **Poor**, marked "Recording quality issue" |
+| 3 or more teaching mistakes | Poor |
+| 1–2 teaching mistakes | At most Average |
+| Tutor's face visible in < 25% of sampled frames | Poor |
+| No homework and no recap/closing | At most Average |
+| No 8x8 background in any full-size camera frame (3 or more checked) | At most Average |
+| < 2 questions per 10 min, or < 2 moments of praise | At most Average |
+| 3 or more "at most Average" rules broken | Poor |
+
+Every rule that fires is listed on the results page and in the PDF. Thresholds are in `config/config.yaml` under `rules`.
 
 See [docs/approach.md](docs/approach.md) for the design and results, and
 [docs/ai_interaction_log.md](docs/ai_interaction_log.md) for decisions and what failed along the way.
@@ -76,7 +101,7 @@ python -m src.pipeline https://youtu.be/...       # CLI with a link
 python -m pytest                                  # 80 tests, no network needed
 ```
 
-A 45–60 min class takes about **3–4 minutes** on the Groq free tier (8,000 tokens/min per model); most of
+A 45–60 min class takes about **5–7 minutes** on the Groq free tier (8,000 tokens/min per model); most of
 that is waiting on rate limits.
 
 ### Dataset scripts (offline; need `data/` with the labelled recordings and `feedbacks.pdf`)
@@ -94,6 +119,19 @@ that is waiting on rate limits.
 | `scripts/feedback_coverage.py` | Do outputs cover the human feedback; is cited evidence real |
 | `scripts/check_speakers.py` | Voice separation accuracy against the Zoom VTTs |
 | `scripts/make_logo.py`, `make_logo_template.py` | App logo; 8x8 logo template for the visual check |
+
+## Hosting (Hugging Face Spaces)
+
+The app runs on a free Hugging Face Space (Docker, 16 GB RAM) built from the `Dockerfile` in this repo.
+
+1. Create a free account at https://huggingface.co and a **write** access token (Settings -> Access Tokens).
+2. Add it to your local `.env` as `HF_TOKEN=...` (never commit it).
+3. Run `python scripts/deploy_space.py --space <your-username>/classcritique`.
+   This creates the Space, uploads the code (never `data/`, `.env` or caches), stores `GROQ_API_KEY` as an
+   encrypted Space secret and the model names as Space variables.
+4. Open `https://huggingface.co/spaces/<your-username>/classcritique`; the first build takes a few minutes.
+
+The hosted app shares the Groq free-tier allowance of the key you configure.
 
 ## Privacy and data handling
 
