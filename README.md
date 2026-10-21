@@ -1,13 +1,3 @@
----
-title: ClassCritique
-colorFrom: purple
-colorTo: green
-sdk: docker
-app_port: 7860
-pinned: false
-short_description: Quality label and timestamped evidence for class recordings
----
-
 # ClassCritique
 
 Assesses a recorded online chess class for children (8x8) and returns **one label** (Poor / Average /
@@ -98,7 +88,7 @@ Model names, limits, thresholds and token budgets are in `config/config.yaml`; t
 streamlit run app.py                              # the app
 python -m src.pipeline path\to\class.mp4          # CLI: text-free JSON summary
 python -m src.pipeline https://youtu.be/...       # CLI with a link
-python -m pytest                                  # 80 tests, no network needed
+python -m pytest                                  # 99 tests, no network needed
 ```
 
 A 45–60 min class takes about **5–7 minutes** on the Groq free tier (8,000 tokens/min per model); most of
@@ -120,18 +110,27 @@ that is waiting on rate limits.
 | `scripts/check_speakers.py` | Voice separation accuracy against the Zoom VTTs |
 | `scripts/make_logo.py`, `make_logo_template.py` | App logo; 8x8 logo template for the visual check |
 
-## Hosting (Hugging Face Spaces)
+## Hosting (Streamlit Community Cloud, free)
 
-The app runs on a free Hugging Face Space (Docker, 16 GB RAM) built from the `Dockerfile` in this repo.
+1. Push this repo to GitHub (secrets are never committed: `.env` and `data/` are gitignored).
+2. Sign in at https://share.streamlit.io with GitHub and click **Create app**.
+3. Repository: this repo · Branch: `main` · Main file: `app.py`.
+4. **Advanced settings:** Python **3.11**, and paste the secrets below (they become environment variables):
+   ```toml
+   GROQ_API_KEY = "your-groq-key"
+   HOSTED_PROVIDER_APPROVED = "true"
+   PROVIDER = "groq"
+   TRANSCRIBE_MODEL = "whisper-large-v3"
+   CONDENSE_MODEL = "openai/gpt-oss-20b"
+   CONDENSE_PARALLEL_MODELS = "openai/gpt-oss-120b"
+   CONDENSE_FALLBACK_MODELS = "openai/gpt-oss-120b"
+   JUDGE_MODEL = "openai/gpt-oss-120b"
+   JUDGE_FALLBACK_MODELS = "openai/gpt-oss-20b"
+   ```
+5. **Deploy.** `packages.txt` installs ffmpeg; the speaker model downloads on first use.
 
-1. Create a free account at https://huggingface.co and a **write** access token (Settings -> Access Tokens).
-2. Add it to your local `.env` as `HF_TOKEN=...` (never commit it).
-3. Run `python scripts/deploy_space.py --space <your-username>/classcritique`.
-   This creates the Space, uploads the code (never `data/`, `.env` or caches), stores `GROQ_API_KEY` as an
-   encrypted Space secret and the model names as Space variables.
-4. Open `https://huggingface.co/spaces/<your-username>/classcritique`; the first build takes a few minutes.
-
-The hosted app shares the Groq free-tier allowance of the key you configure.
+Uploads are capped at 500 MB to fit the free host's memory. The hosted app shares the Groq free-tier allowance of
+the configured key.
 
 ## Privacy and data handling
 

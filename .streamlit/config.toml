@@ -1,6 +1,6 @@
 [server]
 # MB. Keep in sync with media.max_upload_mb in config/config.yaml.
-maxUploadSize = 1024
+maxUploadSize = 500
 
 [browser]
 gatherUsageStats = false

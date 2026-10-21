@@ -16,10 +16,19 @@ LONG_SILENCE_S = 30.0  # gap with no detected speech
 
 
 def read_wav(path: str | Path) -> tuple[np.ndarray, int]:
+    """16-bit samples, kept in that compact form (half the memory of float32; matters on small hosts).
+    Use `as_float` on slices when a model needs floats."""
     with wave.open(str(path), "rb") as w:
         sr = w.getframerate()
         pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
-    return pcm.astype(np.float32) / 32768.0, sr
+    return pcm, sr
+
+
+def as_float(samples: np.ndarray) -> np.ndarray:
+    return samples.astype(np.float32) / 32768.0 if samples.dtype == np.int16 else samples
+
+
+VAD_BLOCK_S = 600  # speech detection runs on 10-minute blocks so the whole recording is never held as floats
 
 
 def speech_regions(audio: np.ndarray, sr: int) -> list[tuple[float, float]]:
@@ -27,7 +36,17 @@ def speech_regions(audio: np.ndarray, sr: int) -> list[tuple[float, float]]:
     from faster_whisper.vad import VadOptions, get_speech_timestamps
 
     opts = VadOptions(min_silence_duration_ms=300, speech_pad_ms=100)
-    return [(t["start"] / sr, t["end"] / sr) for t in get_speech_timestamps(audio, opts, sampling_rate=sr)]
+    block = VAD_BLOCK_S * sr
+    regions: list[tuple[float, float]] = []
+    for start in range(0, len(audio), block):
+        offset = start / sr
+        for t in get_speech_timestamps(as_float(audio[start:start + block]), opts, sampling_rate=sr):
+            a, b = offset + t["start"] / sr, offset + t["end"] / sr
+            if regions and a - regions[-1][1] < 0.05:  # speech running across a block boundary: join it
+                regions[-1] = (regions[-1][0], b)
+            else:
+                regions.append((a, b))
+    return regions
 
 
 def audio_metrics(regions: list[tuple[float, float]], duration: float) -> list[Metric]:

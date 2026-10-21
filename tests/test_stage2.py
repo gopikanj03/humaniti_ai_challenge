@@ -283,3 +283,16 @@ def test_judge_always_sees_event_evidence_within_the_real_budget():
     prompt = evaluator.build_prompt(digests, metrics, visual, {"duration": "50 min"},
                                     budget_tokens=prompt_budget(lc["judge_max_tokens"], evaluator.SYSTEM))
     assert len(re.findall(r"^\[\d", prompt, re.M)) >= 30
+
+
+def test_vad_blocks_join_speech_across_boundaries(monkeypatch):
+    import numpy as np
+    import faster_whisper.vad as vad
+    from src import audio
+    sr = 16000
+    monkeypatch.setattr(audio, "VAD_BLOCK_S", 10)
+    # Fake VAD: speech from 8 s to the end of block 1, and from the start of block 2 to 3 s.
+    calls = iter([[{"start": 8 * sr, "end": 10 * sr}], [{"start": 0, "end": 3 * sr}]])
+    monkeypatch.setattr(vad, "get_speech_timestamps", lambda x, o, sampling_rate: next(calls))
+    regions = audio.speech_regions(np.zeros(20 * sr, dtype=np.int16), sr)
+    assert regions == [(8.0, 13.0)]

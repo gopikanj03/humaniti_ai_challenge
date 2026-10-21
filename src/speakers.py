@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 from pydantic import BaseModel, Field
 
-from .audio import read_wav, speech_regions  # noqa: F401 (re-exported)
+from .audio import as_float, read_wav, speech_regions  # noqa: F401 (re-exported)
 from .config import get_config
 from .models import ensure_model
 from .schemas import Segment
@@ -68,7 +68,7 @@ def _embed(audio: np.ndarray, sr: int, windows: list[tuple[float, float]]) -> np
     embs = np.zeros((len(windows), extractor.dim), dtype=np.float32)
     for i, (a, b) in enumerate(windows):
         stream = extractor.create_stream()
-        stream.accept_waveform(sr, audio[int(a * sr):int(b * sr)])
+        stream.accept_waveform(sr, as_float(audio[int(a * sr):int(b * sr)]))
         stream.input_finished()
         embs[i] = extractor.compute(stream)
     norms = np.linalg.norm(embs, axis=1, keepdims=True)

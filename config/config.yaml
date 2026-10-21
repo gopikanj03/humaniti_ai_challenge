@@ -9,7 +9,7 @@ provider: groq            # organiser-approved hosted provider; env PROVIDER ove
 
 media:
   allowed_extensions: [".mp4", ".mkv", ".mov", ".webm", ".m4a", ".mp3", ".wav"]
-  max_upload_mb: 1024
+  max_upload_mb: 500        # fits free hosting memory; class recordings here are 54-340 MB
   min_duration_s: 30       # shorter clips are rejected: too little to assess
   max_duration_s: 7200     # 2 hours
   sample_rate: 16000
