@@ -1,0 +1,14 @@
+# Stage 1: upload, media handling, transcription
+streamlit>=1.38
+pydantic>=2.7
+pyyaml>=6.0
+requests>=2.31
+python-dotenv>=1.0
+faster-whisper>=1.0.3
+yt-dlp>=2025.1.1            # link input: YouTube, Google Drive, Zoom, direct URLs
+
+# Stage 5: visual signals (face detection/blurring, frame checks)
+opencv-python-headless>=4.10
+
+# Dev / tests
+pytest>=8.0

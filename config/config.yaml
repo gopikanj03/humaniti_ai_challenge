@@ -1,0 +1,47 @@
+# Central configuration. Model names live here (never in code) because providers
+# retire models. Secrets are NOT stored here; see .env.example.
+
+provider: groq             # organiser-approved hosted provider; env PROVIDER overrides. "groq" | "local"
+
+media:
+  allowed_extensions: [".mp4", ".mkv", ".mov", ".webm", ".m4a", ".mp3", ".wav"]
+  max_upload_mb: 1024
+  min_duration_s: 30       # shorter clips are rejected: too little to assess
+  max_duration_s: 7200     # 2 hours
+  sample_rate: 16000
+  chunk_target_s: 600      # ~10 min chunks
+  chunk_min_s: 10          # a trailing chunk shorter than this is folded into the previous one
+  chunk_max_mb: 24         # hard API limit is 25 MB; keep a margin
+
+transcription:
+  language: null           # auto-detect: classes may be in Malayalam, Hindi, French, ... (or "en" to force)
+  # If the hosted call fails after retries, transcribe that chunk locally (slow on CPU,
+  # downloads a ~500 MB model on first use). Off: Groq-only setup, failures surface as errors.
+  fallback_to_local: false
+  # Whisper hallucination guard: segments matching these are flagged and not used as evidence
+  flag_no_speech_prob: 0.6
+  flag_avg_logprob: -1.0
+  flag_compression_ratio: 2.4
+  groq:
+    # Not -turbo: on a Malayalam class turbo mis-detected English and output English-like text,
+    # while large-v3 detected Malayalam with clearly higher confidence (see docs/ai_interaction_log.md).
+    model: whisper-large-v3
+  local:
+    model: small
+    device: cpu
+    compute_type: int8
+    vad_filter: true
+
+groq:
+  base_url: https://api.groq.com/openai/v1
+  requests_per_minute: 20
+  max_retries: 5
+  timeout_s: 300
+
+cache:
+  enabled: true
+  dir: data/cache          # gitignored; holds transcripts, so it stays local
+
+logging:
+  level: INFO
+  log_transcript_text: false   # keep false: transcripts contain identifiable children

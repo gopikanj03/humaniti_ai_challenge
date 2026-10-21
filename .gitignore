@@ -1,0 +1,44 @@
+# --- Confidential data: recordings, frames, audio, transcripts, labels, feedback ---
+data/
+*.mp4
+*.mkv
+*.mov
+*.webm
+*.avi
+*.m4a
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.opus
+*.jpg
+*.jpeg
+*.png
+transcript*.json
+*.srt
+*.vtt
+
+# Generated anchors / style files derived from human feedback (stage 4)
+config/anchors*.json
+config/style*.json
+
+# --- Secrets ---
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# --- Caches / temp ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+.venv/
+venv/
+*.log
+tmp/
+temp/
+*.tmp
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
