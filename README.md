@@ -36,6 +36,7 @@ video / link ─► validate (ffmpeg) ─┬─► audio ─► Whisper (Groq) �
 
 | Rule | Effect |
 |---|---|
+| Not a class at all (no clear speech, no teaching, or judged to be a film, vlog, song, game stream...) | **Poor**, marked "Not a class recording", with the reason |
 | Recording quality: resolution < 360p, blurry video, frozen video (~7.5 min), > 30% black frames, unclear audio, < 15% audible speech | **Poor**, marked "Recording quality issue" |
 | 3 or more teaching mistakes | Poor |
 | 1–2 teaching mistakes | At most Average |
@@ -43,7 +44,7 @@ video / link ─► validate (ffmpeg) ─┬─► audio ─► Whisper (Groq) �
 | No homework and no recap/closing | At most Average |
 | No 8x8 background in any full-size camera frame (3 or more checked) | At most Average |
 | < 2 questions per 10 min, or < 2 moments of praise | At most Average |
-| 3 or more "at most Average" rules broken | Poor |
+| 2 or more "at most Average" rules broken | Poor |
 
 Every rule that fires is listed on the results page and in the PDF. Thresholds are in `config/config.yaml` under `rules`.
 

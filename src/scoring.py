@@ -105,6 +105,12 @@ def score(assessment: Assessment, rubric: dict | None = None, *,
           quality: list[tuple[float, str]] | None = None, metrics: list[Metric] | None = None) -> ScoreResult:
     """`quality` is a list of (factor in 0..1, reason) applied to confidence, e.g. weak speaker separation."""
     cfg = get_config()["scoring"]
+    if not assessment.is_class_recording:
+        reason = assessment.not_class_reason.strip() or "it does not contain a lesson."
+        return ScoreResult(label="Poor", score=0.0, confidence=round(assessment.confidence, 2),
+                           low_confidence=assessment.confidence < cfg["low_confidence_below"],
+                           weight_coverage=0.0, not_a_class=True, score_label="Poor",
+                           rules_applied=[f"This does not appear to be a class recording: {reason}"])
     rubric = rubric or load_rubric()
     weights = {d["id"]: float(d["weight"]) for d in rubric["dimensions"]}
     total_w = sum(weights.values())

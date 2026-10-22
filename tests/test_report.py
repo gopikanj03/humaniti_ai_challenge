@@ -76,3 +76,22 @@ def test_main_reasons_lead_with_rules_then_weak_and_strong_areas():
     assert reasons[0].startswith("No homework")
     assert any("Warmth And Energy needs work: Little praise." == x for x in reasons)
     assert reasons[-1].startswith("Teaching Accuracy was a strength")
+
+
+def test_bar_always_shows_the_final_result():
+    from src import explain
+    from src.schemas import ScoreResult
+    lowered = ScoreResult(label="Average", score=3.5, score_label="Good", confidence=0.8, low_confidence=False,
+                          weight_coverage=1, rules_applied=["No homework and no recap or closing."])
+    band = next(b for b in explain.scale(lowered) if b[0] == "Average")
+    assert band[1] <= explain.bar_position(lowered) < band[2]          # marker inside the Average band
+    assert "would be Good" in explain.score_line(lowered) and "Average" in explain.score_line(lowered)
+    normal = ScoreResult(label="Good", score=3.5, score_label="Good", confidence=0.8, low_confidence=False, weight_coverage=1)
+    assert explain.bar_position(normal) == 3.5
+
+
+def test_report_date_is_day_month_year():
+    from datetime import date
+    data = report.report_data(_result())
+    assert data["generated"] == date.today().strftime("%d/%m/%Y")      # e.g. 22/10/2026, not 2026-10-22
+    assert re.fullmatch(r"\d{2}/\d{2}/\d{4}", data["generated"])

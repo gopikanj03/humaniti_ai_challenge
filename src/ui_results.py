@@ -150,10 +150,12 @@ def _evidence_list(items, empty: str = "") -> str:
 
 def _scale_html(r) -> str:
     bands = explain.scale(r)
-    segs = "".join(f'<div class="cc-band{" on" if name == r.score_label else ""}" style="flex:{hi - lo:.2f}">'
+    # The highlighted band and the marker always show the FINAL result (never the score-alone label).
+    segs = "".join(f'<div class="cc-band{" on" if name == r.label else ""}" style="flex:{hi - lo:.2f}">'
                    f'<span>{escape(name)}</span></div>' for name, lo, hi in bands)
+    pos = min(max(explain.bar_position(r) / 5, 0), 1) * 100
     return (f'<div class="cc-scale"><div class="cc-bands">{segs}</div>'
-            f'<div class="cc-marker" style="left:{min(max(r.score / 5, 0), 1) * 100:.1f}%"></div></div>')
+            f'<div class="cc-marker" style="left:{pos:.1f}%"></div></div>')
 
 
 def hero_html(res: PipelineResult) -> str:
@@ -163,19 +165,20 @@ def hero_html(res: PipelineResult) -> str:
     colour = LABEL_COLOUR[r.label]
     sure = explain.certainty(r.confidence)
     lang = s["language"] or "unknown"
-    badge = '<div class="cc-qi">Recording quality issue</div>' if r.quality_issue else ""
+    badge = ('<div class="cc-qi">Not a class recording</div>' if r.not_a_class else
+             '<div class="cc-qi">Recording quality issue</div>' if r.quality_issue else "")
     why = "".join(f"<li>{escape(x)}</li>" for x in explain.main_reasons(r, a, rubric))
     sure_why = "".join(f"<li>{escape(explain.plain_reason(x))}</li>" for x in r.confidence_reasons)
-    lowered = (f'<p class="cc-muted cc-small">On its score alone this class would be {escape(r.score_label)}; '
-               f'the required standards below set it to {escape(r.label)}.</p>'
-               if r.score_label and r.score_label != r.label else "")
+    lowered = (f'<p class="cc-muted cc-small">Required standards that were not met are listed first.</p>'
+               if explain.lowered(r) else "")
     return _compact(f"""
 <div class="cc-card cc-hero" style="--label:{colour}">
 <div class="cc-hero-main">
 <div class="cc-label-wrap"><div class="cc-kicker">Overall result</div><div class="cc-label">{escape(r.label)}</div>{badge}</div>
 <div class="cc-meaning"><div class="cc-kicker">What this means</div><p>{escape(explain.label_meaning(r))}</p></div>
 </div>
-<div class="cc-scorebox"><div class="cc-kicker">Score: {r.score:.1f} out of 5</div>{_scale_html(r)}</div>
+<div class="cc-scorebox"><div class="cc-kicker">Where this class falls</div>{_scale_html(r)}
+<p class="cc-muted cc-small cc-scoreline">{escape(explain.score_line(r))}</p></div>
 <div class="cc-sure"><span class="cc-kicker">How sure is this result?</span>&nbsp;<b>{sure}.</b>&nbsp;
 <span class="cc-muted">{escape(explain.CERTAINTY_MEANING[sure])}</span>
 {f'<details class="cc-reasons"><summary>Why?</summary><ul>{sure_why}</ul></details>' if sure_why else ''}</div>

@@ -56,7 +56,13 @@ def certainty(confidence: float) -> str:
     return "Fairly sure" if confidence >= 0.7 else "Somewhat sure" if confidence >= 0.5 else "Not very sure"
 
 
+NOT_A_CLASS_MEANING = ("This does not appear to be a class (tutorial) recording, so it could not be assessed as a "
+                       "lesson and is marked Poor.")
+
+
 def label_meaning(result: ScoreResult) -> str:
+    if result.not_a_class:
+        return NOT_A_CLASS_MEANING
     return QUALITY_ISSUE_MEANING if result.quality_issue else LABEL_MEANING[result.label]
 
 
@@ -87,7 +93,7 @@ def _first_sentence(text: str) -> str:
 
 def main_reasons(result: ScoreResult, assessment: Assessment, rubric: dict, limit: int = 4) -> list[str]:
     """The few things that most explain the label, in plain words."""
-    if result.quality_issue:
+    if result.quality_issue or result.not_a_class:
         return result.rules_applied[:limit]
     names = {d["id"]: d["name"] for d in rubric["dimensions"]}
     reasons = list(result.rules_applied)
@@ -107,3 +113,24 @@ def scale(result: ScoreResult) -> list[tuple[str, float, float]]:
     order = ["Poor", "Average", "Good", "Excellent"]
     bounds = [th[x] for x in order] + [5.0]
     return [(order[i], bounds[i], bounds[i + 1]) for i in range(4)]
+
+
+def lowered(result: ScoreResult) -> bool:
+    """True when the required standards set a lower label than the score alone."""
+    return bool(result.score_label) and result.score_label != result.label
+
+
+def bar_position(result: ScoreResult) -> float:
+    """Where to draw the marker on the 0-5 bar. It always sits in the band of the FINAL result: when the required
+    standards lowered the label, the marker is placed at the top of the final band, not at the raw score."""
+    if not lowered(result):
+        return result.score
+    band = next(b for b in scale(result) if b[0] == result.label)
+    return min(result.score, band[2] - 0.08)
+
+
+def score_line(result: ScoreResult) -> str:
+    if lowered(result):
+        return (f"Score {result.score:.1f} out of 5 would be {result.score_label}, but required standards were not "
+                f"met, so the result is {result.label} (see Why This Result).")
+    return f"Score {result.score:.1f} out of 5."

@@ -153,3 +153,21 @@ Each area is a simple question ("Is what the tutor teaches correct?") with a rat
 Needs work / Weak / Not checked) and examples behind a toggle. Evidence is tagged "Said in class / Measured /
 Seen on video", whole-class items show "Overall", and all technical measurements moved into one collapsed
 "Technical Details" section. The judge is told to write for a parent or manager, without technical terms.
+
+**Stricter cut-off and a confusing score bar (owner test on weak/B558).** B558 (8x8: Poor) came out Average: its
+teaching score alone was 3.5 (Good), and two standards were broken (no homework and no recap; 1.5 questions per
+10 minutes), but Poor needed three. The threshold is now two broken standards -> Poor; re-applied to every
+analysed class, this fixed B558 and changed no class that was already right (4 of 8 match, up from 3). The score
+bar also highlighted the score-alone band (Good) while the result said Average; it now always shows the final
+result, with a sentence explaining when the standards lowered it.
+
+**Recordings that are not classes (owner request).** A random video must be Poor and say it is not a class. Three
+layers: no clear speech (voice-activity check, so noise or music where Whisper "hears" a stray line still
+counts as no speech); speech but no teaching at all in the extracted events (no explanations, questions,
+activities, corrections or homework), decided without calling the judge; and the judge's own
+`is_class_recording` verdict for things like films, vlogs or game streams. Each gives Poor, flagged "Not a class
+recording", with the reason. Checked on a 60 s pink-noise clip: speech 0%, Poor, "almost no clear speech".
+
+**Hosting: "The app is not set up correctly".** On Streamlit Cloud the app could not see its Groq settings. The
+app now copies Streamlit's Secrets into the environment at start-up, so it no longer depends on how Streamlit
+exposes them; the error message tells an administrator which secrets to check. PDF dates are now day/month/year.

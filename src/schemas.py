@@ -132,6 +132,8 @@ class Assessment(BaseModel):
     improvements: list[EvidenceItem] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     teaching_errors: list[EvidenceItem] = Field(default_factory=list)  # factual mistakes the tutor taught
+    is_class_recording: bool = True            # False: not a lesson at all (film, vlog, music, gameplay, noise...)
+    not_class_reason: str = ""
     confidence: float = Field(ge=0, le=1)
 
 
@@ -146,3 +148,4 @@ class ScoreResult(BaseModel):
     score_label: str | None = None             # label from the weighted score alone, before rules
     rules_applied: list[str] = Field(default_factory=list)   # strict rules that lowered the label, with reasons
     quality_issue: bool = False                # recording's technical quality is too poor to assess fairly
+    not_a_class: bool = False                  # the recording does not appear to be a class at all

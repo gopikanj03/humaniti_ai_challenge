@@ -22,13 +22,15 @@ def report_data(res: PipelineResult) -> dict:
     sure = explain.certainty(r.confidence)
     return {
         "title": "ClassCritique Report",
-        "generated": date.today().isoformat(),
+        "generated": date.today().strftime("%d/%m/%Y"),  # Indian style: day/month/year
         "recording": {"duration_min": s["duration_min"], "language": s["language"] or "unknown"},
         "result": {"label": r.label, "score": r.score, "score_label": r.score_label,
                    "meaning": explain.label_meaning(r), "quality_issue": r.quality_issue,
+                   "not_a_class": r.not_a_class,
                    "certainty": sure, "certainty_meaning": explain.CERTAINTY_MEANING[sure],
                    "certainty_reasons": [explain.plain_reason(x) for x in r.confidence_reasons],
-                   "why": explain.main_reasons(r, a, rubric),
+                   "why": explain.main_reasons(r, a, rubric), "score_line": explain.score_line(r),
+                   "marker": explain.bar_position(r),
                    "scale": [{"label": n, "from": lo, "to": hi} for n, lo, hi in explain.scale(r)]},
         "summary": a.summary,
         "strengths": [e.model_dump() for e in a.strengths],
@@ -95,14 +97,14 @@ def to_pdf(data: dict) -> bytes:
         for band in r["scale"]:
             bx = x0 + band["from"] / 5 * width
             bw = (band["to"] - band["from"]) / 5 * width - 0.8
-            on = band["label"] == r["score_label"]
+            on = band["label"] == r["label"]  # always the FINAL result
             pdf.set_fill_color(*((206, 196, 250) if on else (238, 235, 250)))
             pdf.rect(bx, y, bw, h, style="F")
             pdf.set_font("Helvetica", "B" if on else "", 8.5)
             pdf.set_text_color(*(text_col if on else muted))
             pdf.set_xy(bx, y)
             pdf.cell(bw, h, band["label"], align="C")
-        mx = x0 + min(max(r["score"] / 5, 0), 1) * width
+        mx = x0 + min(max(r["marker"] / 5, 0), 1) * width
         pdf.set_fill_color(*text_col)
         pdf.rect(mx - 0.7, y - 1.5, 1.4, h + 3, style="F")
         pdf.set_text_color(*text_col)
@@ -119,13 +121,15 @@ def to_pdf(data: dict) -> bytes:
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_text_color(*text_col)
     pdf.cell(0, 11, _latin1(f"Overall Result: {r['label']}"), new_x="LMARGIN", new_y="NEXT")
-    if r["quality_issue"]:
+    if r["not_a_class"]:
+        para("Not a class recording", "B", 11)
+    elif r["quality_issue"]:
         para("Recording quality issue", "B", 11)
     para(r["meaning"], size=11)
 
-    heading("Score", 12)
-    para(f"{r['score']:.1f} out of 5. The bar shows where this score falls.", size=9.5, color=muted)
+    heading("Where This Class Falls", 12)
     scale_bar(r)
+    para(r["score_line"], size=9.5, color=muted)
 
     heading("How Sure Is This Result?", 12)
     para(f"{r['certainty']}. {r['certainty_meaning']}")
@@ -137,8 +141,7 @@ def to_pdf(data: dict) -> bytes:
     if r["why"]:
         heading("Why This Result")
         if r["score_label"] and r["score_label"] != r["label"]:
-            para(f"On its score alone this class would be {r['score_label']}; the required standards below set it "
-                 f"to {r['label']}.", "I", 9.5, muted)
+            para("Required standards that were not met are listed first.", "I", 9.5, muted)
         for x in r["why"]:
             item("", x)
 

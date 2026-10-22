@@ -33,9 +33,11 @@ def test_teaching_mistakes_cap_the_label():
     assert _score(GOOD_CLASS, errors=3).label == "Poor"
 
 
-def test_single_standard_caps_at_average_and_three_make_it_poor():
+def test_single_standard_caps_at_average_and_two_make_it_poor():
     assert _score({**GOOD_CLASS, "homework_given": False, "recap_or_conclusion_in_last_10min": False}).label == "Average"
     assert _score({**GOOD_CLASS, "logo_in_camera_view_share": 0.0}).label == "Average"
+    two = {**GOOD_CLASS, "homework_given": False, "recap_or_conclusion_in_last_10min": False, "questions_per_10min": 1.5}
+    assert _score(two).label == "Poor"                  # like weak/B558: no homework/recap and very few questions
     three = {**GOOD_CLASS, "logo_in_camera_view_share": 0.0, "questions_per_10min": 1.0, "praise_count": 0}
     r = _score(three)
     assert r.label == "Poor" and r.score_label == "Excellent" and len(r.rules_applied) == 4
@@ -55,3 +57,12 @@ def test_rules_never_raise_a_label_and_skip_unmeasured_values():
 def test_background_rule_needs_enough_camera_frames():
     few = {**GOOD_CLASS, "logo_in_camera_view_share": 0.0, "camera_view_share": 0.03}   # ~2 camera frames
     assert _score(few).label == "Excellent"
+
+
+def test_not_a_class_recording_is_poor_with_its_reason():
+    a = Assessment(summary="A cooking vlog.", confidence=0.9, is_class_recording=False,
+                   not_class_reason="it is a cooking video, not a lesson.",
+                   dimensions=[DimensionScore(dimension=d["id"], score=4.5) for d in scoring.load_rubric()["dimensions"]])
+    r = scoring.score(a, metrics=[Metric(name=k, value=v, source="visual") for k, v in GOOD_CLASS.items()])
+    assert r.label == "Poor" and r.not_a_class and "cooking video" in r.rules_applied[0]
+

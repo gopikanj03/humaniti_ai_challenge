@@ -289,6 +289,7 @@ code {{ background: color-mix(in srgb, var(--accent) 14%, transparent) !importan
   position: absolute; top: -5px; width: 4px; height: 40px; margin-left: -2px; border-radius: 4px;
   background: var(--text); box-shadow: 0 0 0 2px var(--surface-strong);
 }}
+.stApp p.cc-scoreline {{ margin: 0.45rem 0 0; }}
 .cc-sure {{ margin-top: 1rem; font-size: 0.95rem; line-height: 1.55; }}
 .stApp h3.cc-sub {{ margin-top: 1.1rem; }}
 .cc-why {{ margin: 0.2rem 0 0; padding-left: 1.2rem; line-height: 1.6; }}

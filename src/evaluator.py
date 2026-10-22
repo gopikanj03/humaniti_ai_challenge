@@ -20,7 +20,7 @@ from .schemas import Assessment, ChunkDigest, DimensionScore, Event, EvidenceIte
 from .scoring import load_rubric
 
 log = logging.getLogger(__name__)
-PROMPT_VERSION = "judge-v9"
+PROMPT_VERSION = "judge-v10"
 EVIDENCE_TOLERANCE_S = 20.0
 
 DEFAULT_STYLE = """Write like an experienced 8x8 class reviewer: short, specific, practical. Each observation
@@ -59,7 +59,11 @@ Rules:
    wrong because of speech-recognition errors is not a mistake. Claims about a specific board position
    cannot be checked without the board: do not score them either way. If no mistakes are found in the
    explanations you were given, say so and score on clarity and correctness.
-9. Write for a parent or a manager with no technical background: short, plain English sentences that say
+9. First decide whether this is a class at all: a lesson where a teacher teaches learners (any subject or
+   language). If it is something else (a film, vlog, song, game stream, advert, unrelated talk, or mostly noise),
+   set "is_class_recording": false, explain what it appears to be in "not_class_reason", set every dimension
+   score to null, and keep the rest short.
+10. Write for a parent or a manager with no technical background: short, plain English sentences that say
    what the tutor did and why it matters for the children. Never use metric variable names (write "homework
    was given", not "homework_given = true"), percentages of technical measures, or words like "events",
    "digests", "metrics", "segments" or "open-question share". Say "asked the children why..." instead.
@@ -72,7 +76,9 @@ Return JSON:
                                "observation": "specific, factual", "source": "transcript" | "metric" | "visual"}]}],
  "strengths": [<evidence items>], "improvements": [<evidence items>],
  "limitations": ["what could not be assessed and why"],
- "teaching_errors": [{"timestamp": "mm:ss", "observation": "what the tutor said, and the correct fact",
+ "is_class_recording": true or false,
+ "not_class_reason": "only if false: one plain sentence on what the recording appears to be instead",
+"teaching_errors": [{"timestamp": "mm:ss", "observation": "what the tutor said, and the correct fact",
                       "source": "transcript"}],
  "confidence": 0-1}
 List in "teaching_errors" every factual chess mistake the tutor taught (empty list if none). Only real

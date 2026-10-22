@@ -38,6 +38,9 @@ log = logging.getLogger(__name__)
 # on_stage(stage_name, fraction_complete_of_that_stage, plain-language detail for the UI)
 StageFn = Callable[[str, float, str], None]
 
+# Event types that only occur when someone is teaching; a recording with none of them is not a class.
+TEACHING_EVENTS = {"explanation", "question", "activity", "homework", "corrective_feedback", "recap_conclusion",
+                   "individual_attention"}
 MUTED_MAX_DB = -50.0  # if even the loudest sample is below this, treat as muted
 TEMP_PREFIX = "classeval_"
 STALE_TEMP_S = 2 * 3600  # far longer than any real run, so an analysis in progress is never touched
@@ -240,15 +243,30 @@ def run(src_path: str | Path | None = None, on_stage: StageFn | None = None, *,
         meta = {"duration": f"{info.duration_s / 60:.0f} min",
                 "language": LANGUAGE_NAMES.get(transcript.language, transcript.language) or "unknown",
                 "subject": "chess, for children, online (Zoom)"}
-        if digests:
+        teaching = sum(1 for d in digests for e in d.events if e.type in TEACHING_EVENTS)
+        if digests and teaching == 0:
+            # No teaching at all (no explanations, questions, activities...): not a class. No judge call.
+            # Voice-activity detection, not the transcript: Whisper can "hear" a long made-up line in noise.
+            ratio = next((m.value for m in metrics if m.name == "speech_ratio"), None)
+            if isinstance(ratio, (int, float)) and ratio < 0.15:
+                why = "it has almost no clear speech (noise, music or silence)."
+            else:
+                why = "it contains speech, but no teaching such as explanations, questions or activities."
+            assessment = Assessment(
+                summary=f"This recording does not appear to be a class: {why}",
+                dimensions=[DimensionScore(dimension=d["id"]) for d in scoring.load_rubric()["dimensions"]],
+                is_class_recording=False, confidence=0.8, not_class_reason=why)
+        elif digests:
             notify("Assessing against the rubric", 0.0, "Scoring 6 rubric areas and checking every piece of evidence")
             assessment, _ = evaluate(digests, metrics, meta, file_hash,
                                      visual=vis.observations if vis and vis.frames else None)
         else:
             assessment = Assessment(
-                summary="The recording has no usable speech, so teaching could not be assessed.",
+                summary="This recording has no clear speech, so it does not appear to be a class recording (or its "
+                        "sound is missing).",
                 dimensions=[DimensionScore(dimension=d["id"]) for d in scoring.load_rubric()["dimensions"]],
-                limitations=["No usable speech: muted, silent or unintelligible audio."], confidence=0.0)
+                limitations=["No usable speech: muted, silent, noise or music only."], confidence=0.0,
+                is_class_recording=False, not_class_reason="it has no clear speech (silent, noise or music only).")
 
         result = scoring.score(assessment, quality=_quality_factors(transcript, spk, digests, metrics), metrics=metrics)
         notify("Done", 1.0)

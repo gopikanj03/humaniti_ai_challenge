@@ -118,7 +118,7 @@ rules:
     min_checked_camera_frames: 3  # 8x8 background rule needs at least this many full-size camera frames
     min_questions_per_10min: 2.0  # below -> at most Average
     min_praise: 2                 # below -> at most Average
-    average_caps_to_poor: 3       # this many "at most Average" rules broken -> Poor
+    average_caps_to_poor: 2       # this many "at most Average" rules broken -> Poor (was 3; weak/B558 showed 2 already means weak)
 
 groq:
   base_url: https://api.groq.com/openai/v1

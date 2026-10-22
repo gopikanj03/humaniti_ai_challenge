@@ -20,6 +20,20 @@ from src import report
 from src import ui_results as ui
 from src.ui_theme import PALETTES, background_js, css
 
+
+def _load_hosting_secrets() -> None:
+    """On Streamlit Cloud, settings live in the app's Secrets box. Copy them into the environment (where the rest
+    of the app reads them) before anything else loads, so hosting never depends on how Streamlit exposes them.
+    Locally there is usually no secrets file, and .env is used instead."""
+    try:
+        for key, value in st.secrets.items():
+            if isinstance(value, (str, int, float, bool)) and not os.environ.get(key):
+                os.environ[key] = str(value)
+    except Exception:  # no secrets file: running locally with .env
+        pass
+
+
+_load_hosting_secrets()
 setup_logging()
 log = logging.getLogger("classcritique.app")
 pipeline.sweep_stale_temp()  # remove audio left by any run that was killed mid-way
@@ -95,7 +109,8 @@ if (analyze_file and upload is not None) or (analyze_link and link.strip()):
         st.error(f"**There is a problem with this recording.** {e}")
     except ConfigError as e:
         log.error("configuration problem: %s", e)
-        st.error("**The app is not set up correctly.** Please contact the administrator.")
+        st.error("**The app is not set up correctly.** Please contact the administrator. (Administrator: check that "
+                 "GROQ_API_KEY and HOSTED_PROVIDER_APPROVED are set in the app's Secrets.)")
     except ProviderError as e:
         log.warning("analysis service error: %s (code=%s)", e, e.code)
         if e.code == "daily_limit":
