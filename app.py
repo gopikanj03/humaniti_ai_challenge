@@ -26,11 +26,16 @@ def _load_hosting_secrets() -> None:
     of the app reads them) before anything else loads, so hosting never depends on how Streamlit exposes them.
     Locally there is usually no secrets file, and .env is used instead."""
     try:
-        for key, value in st.secrets.items():
-            if isinstance(value, (str, int, float, bool)) and not os.environ.get(key):
-                os.environ[key] = str(value)
+        items = list(st.secrets.items())
     except Exception:  # no secrets file: running locally with .env
-        pass
+        return
+    for key, value in items:
+        # Accept a section heading (e.g. [groq]) as well as top-level keys, and any letter case.
+        pairs = value.items() if hasattr(value, "items") else [(key, value)]
+        for k, v in pairs:
+            name = str(k).strip().upper()
+            if isinstance(v, (str, int, float, bool)) and not os.environ.get(name):
+                os.environ[name] = str(v).strip()
 
 
 _load_hosting_secrets()
@@ -109,8 +114,18 @@ if (analyze_file and upload is not None) or (analyze_link and link.strip()):
         st.error(f"**There is a problem with this recording.** {e}")
     except ConfigError as e:
         log.error("configuration problem: %s", e)
-        st.error("**The app is not set up correctly.** Please contact the administrator. (Administrator: check that "
-                 "GROQ_API_KEY and HOSTED_PROVIDER_APPROVED are set in the app's Secrets.)")
+        msg = str(e)
+        # Name the setting that needs fixing (never its value), so an administrator knows what to change.
+        if "HOSTED_PROVIDER_APPROVED" in msg:
+            fix = 'HOSTED_PROVIDER_APPROVED must be set to "true"'
+        elif "GROQ_API_KEY" in msg:
+            fix = "GROQ_API_KEY is missing or empty"
+        elif "PROVIDER must be" in msg:
+            fix = 'PROVIDER must be "groq" or "local"'
+        else:
+            fix = "see the app logs for details"
+        st.error(f"**The app is not set up correctly.** Please contact the administrator. "
+                 f"(Administrator, in the app's Secrets: {fix}.)")
     except ProviderError as e:
         log.warning("analysis service error: %s (code=%s)", e, e.code)
         if e.code == "daily_limit":
