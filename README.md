@@ -20,9 +20,6 @@ Good / Excellent) with **timestamped, evidence-based observations**. Input is a 
    problems or not a class → Poor; teaching mistakes, no homework and no recap, no 8x8 background, too few
    questions or praise → at most Average; two of these → Poor). Thresholds are in `config/config.yaml`.
 
-Details and results: [docs/approach.md](docs/approach.md) · Decisions and failures:
-[docs/ai_interaction_log.md](docs/ai_interaction_log.md)
-
 ## Setup
 
 1. Python 3.11 and ffmpeg (Windows: `winget install Gyan.FFmpeg`; macOS: `brew install ffmpeg`).

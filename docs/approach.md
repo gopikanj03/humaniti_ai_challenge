@@ -94,36 +94,9 @@ chose to keep it. average/B516 reads like a Good note.
 - **Visual**: 1 frame per 45 s in memory; 8x8 logo by template matching (no-logo frames ≤ 0.49, logo frames
   0.68–1.00 across three tutors; threshold 0.6). Lighting is not measured.
 
-## 5. Results so far (22/10/2026)
 
-**These are not final numbers.** Recordings were checked one or two at a time while the system changed, and the
-full run on all ten labelled classes with the latest version has not been done (it is limited by the free tier).
-Last full re-scoring, after the strict rules were added: **4 of 8 analysed classes matched 8x8's label**, and no
-class was more than one level off apart from good/B435 (see below). Later single-class checks on 22/10 are shown
-where they changed the result.
 
-| Recording | 8x8 | ClassCritique (latest) | Notes |
-|---|---|---|---|
-| excellent/B472 | Excellent | Good (3.7) | one level low; children called by name were undercounted before whole-class counting (3 → 6), not re-checked since |
-| excellent/B491 | Excellent | Good (3.6) | one level low; no homework lowered the lesson-structure score |
-| good/B552 | Good | Excellent (3.92) | was Good; now just above the 3.75 cut-off. A false "teaching mistake" once made it Average; now withdrawn by the second check |
-| good/B435 | Good | Poor | the recording is missing most of the tutor's speech (Zoom's transcript shows 5 tutor questions, no greeting): a data mismatch, not a scoring one |
-| average/B435 | Average | Average | match |
-| average/B516 | Average | not analysed | its reviewer note reads like a Good one |
-| weak/B482 | Poor | Poor (1.3) | match; opening/rapport 0/5, as the reviewer noted |
-| weak/B558 (held out) | Poor | Poor | match after "two broken standards → Poor" |
-| quality issue/B392 | Poor | Average | label partly rests on prior warnings, which are not observable |
-| quality issue/B441 | Poor | not analysed | |
-| demo Malayalam | – | Good (3.06, low confidence) | unlabelled; early version; non-English, unstable speaker separation |
-
-Pattern: mistakes are one level off, in both directions (B552 above, B472 and B491 below), so moving the cut-offs
-alone would not fix them. Feedback coverage on two recordings: 5/7 human themes covered; 29/29 evidence items
-grounded in the transcript; 3/3 quotes verified.
-
-*Still to do: the full run with the latest version, then calibration (leave-one-out accuracy, confusion matrix,
-held-out check), using `scripts/run_samples.py --labelled-only --wait --consistent` and `scripts/calibrate.py`.*
-
-## 6. Limitations and next steps
+## 5. Limitations and next steps
 
 - Ten labels: thresholds will move with more data; prefer collecting labels over tuning.
 - Speaker separation: a child-voice-aware embedding model, or Zoom's per-speaker audio where available, would
