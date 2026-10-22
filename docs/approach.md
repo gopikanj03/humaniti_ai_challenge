@@ -2,27 +2,27 @@
 
 ## Approach note
 
-**Approach.** ClassCritique turns a class recording into evidence before judging it. Groq Whisper transcribes;
-local voice clustering separates the teacher from the children; sampled frames are checked locally for the
-tutor's camera and the 8x8 branded background. A small model condenses each 10-minute chunk into timestamped
-events, and every quote must exist in the transcript. A larger model scores six rubric dimensions derived from
-8x8's own feedback, citing those moments; Python computes the weighted score and label.
+**Approach.** ClassCritique turns a recording into evidence before judging it. Groq Whisper transcribes; local
+voice clustering separates the tutor from the children; sampled frames are checked locally for the tutor's camera
+and the 8x8 background. gpt-oss-20b condenses each 10-minute section into timestamped events whose quotes must
+exist in the transcript, then scores seven rubric areas derived from 8x8's feedback, citing those moments.
+Python computes the weighted score, applies strict rules (recording-quality problems give Poor; teaching
+mistakes, no homework or recap, too few questions or too little praise cap the label) and picks the label.
 
-**What worked.** Evidence checks: unverifiable events and citations are dropped (21 of 154 events on one class),
-so observations point to real moments. Rubric themes from clustering reviewer feedback match what reviewers
-care about: rapport, individual attention, homework, warmth, the 8x8 background. whisper-large-v3 with a
-language lock handled a Malayalam class that the turbo model mistook for English. Early checks agreed with
-human labels (Good→Good, Poor→Poor; Excellent→Good).
+**What worked.** Evidence checks: unverifiable events and citations are dropped, so every observation points to a
+real moment. Rubric themes from clustering reviewer feedback match what reviewers care about (rapport, individual
+attention, homework, warmth, the 8x8 background). whisper-large-v3 with a language lock handled a Malayalam class.
+Counting names and praise over the whole transcript matched Zoom's own transcripts closely.
 
-**What failed or was weak.** Voice-based teacher/student separation averaged only 0.70 balanced accuracy, and our
-first confidence measure pointed the wrong way, so it was replaced by a stability check and participation is
-reported cautiously. Two bugs made the judge unfair: token-budget trimming hid praise, then blamed the teacher
-for it, and "camera full-size in 11% of frames" read as "face visible 11%". Both are fixed with rules and
-tests. The free tier (8k tokens/min) forced strict per-request budgets.
+**What failed or was weak.** Label agreement is modest: 4 of 8 analysed classes matched 8x8 at the last full
+re-scoring, and Excellent classes tend to come out Good. Voice separation averaged 0.70 balanced accuracy, so
+participation is reported cautiously. The judge, reading summaries without the board, once took a puzzle remark
+("with the knight we cannot do a checkmate") for a wrong rule; a focused second check now withdraws such cases.
+The free tier (8,000 tokens/min) forced strict budgets and slow runs.
 
-**Limitations.** Ten labelled classes cannot validate weights or thresholds. Video is sampled every 45 s. Lighting
-and tone of voice are not measured, to avoid skin-tone and voice biases. Prior warnings are not observable.
-Non-English classes get lower confidence.
+**Limitations.** Ten labels cannot validate weights or thresholds, and the full run with the latest changes is
+still to be done. Video is sampled every 45 s. Tone of voice and lighting are not measured, to avoid bias. Prior
+warnings are not observable. Non-English classes get lower confidence.
 
 ---
 
@@ -82,7 +82,11 @@ chose to keep it. average/B516 reads like a Good note.
 - **Judge**: sees digests, not the transcript. Event lists are trimmed to the token budget by priority, with types
   taking turns, and the judge is told omitted events are not evidence of absence. Evidence must point within 20 s
   of a real event (30 s of a sampled frame for visual evidence) or the item is removed; a score with no
-  surviving evidence becomes "missing".
+  surviving evidence becomes "missing". Each reported teaching mistake gets a short second check that sees what
+  was said around it (not the judge's claim) and must classify it as a general rule or a remark about the
+  position; only a false general rule counts, and if one is withdrawn the judge runs once more with that note.
+  Whole-class counts of children called by name and of praise are computed in Python from the transcript, because
+  the summaries keep only about 20 moments per section. Temperature is 0 for repeatable results.
 - **Scoring**: weighted mean over scored dimensions, with missing weights redistributed; confidence is multiplied
   by weight coverage and by quality factors (speaker stability, language, transcription clarity, dropped events).
   If nothing can be scored, the label falls back to Poor with confidence 0 (an unusable recording is itself a
@@ -90,26 +94,42 @@ chose to keep it. average/B516 reads like a Good note.
 - **Visual**: 1 frame per 45 s in memory; 8x8 logo by template matching (no-logo frames ≤ 0.49, logo frames
   0.68–1.00 across three tutors; threshold 0.6). Lighting is not measured.
 
-## 5. Results so far
+## 5. Results so far (22/10/2026)
 
-Checked one or two recordings per stage to save time; the full run (all recordings → calibration) comes last.
+**These are not final numbers.** Recordings were checked one or two at a time while the system changed, and the
+full run on all ten labelled classes with the latest version has not been done (it is limited by the free tier).
+Last full re-scoring, after the strict rules were added: **4 of 8 analysed classes matched 8x8's label**, and no
+class was more than one level off apart from good/B435 (see below). Later single-class checks on 22/10 are shown
+where they changed the result.
 
-| Recording | Human | ClassCritique | Notes |
+| Recording | 8x8 | ClassCritique (latest) | Notes |
 |---|---|---|---|
-| good/B552 | Good | Good (3.60, conf 0.85) | all 6 dimensions scored |
-| weak/B482 | Poor | Poor (1.29) | opening/rapport 0/5, as the reviewer noted |
-| excellent/B472 | Excellent | Good (3.41) | one level low; thresholds not yet calibrated |
-| demo Malayalam | – | Good (3.06), low confidence | non-English, unstable speaker separation |
+| excellent/B472 | Excellent | Good (3.7) | one level low; children called by name were undercounted before whole-class counting (3 → 6), not re-checked since |
+| excellent/B491 | Excellent | Good (3.6) | one level low; no homework lowered the lesson-structure score |
+| good/B552 | Good | Excellent (3.92) | was Good; now just above the 3.75 cut-off. A false "teaching mistake" once made it Average; now withdrawn by the second check |
+| good/B435 | Good | Poor | the recording is missing most of the tutor's speech (Zoom's transcript shows 5 tutor questions, no greeting): a data mismatch, not a scoring one |
+| average/B435 | Average | Average | match |
+| average/B516 | Average | not analysed | its reviewer note reads like a Good one |
+| weak/B482 | Poor | Poor (1.3) | match; opening/rapport 0/5, as the reviewer noted |
+| weak/B558 (held out) | Poor | Poor | match after "two broken standards → Poor" |
+| quality issue/B392 | Poor | Average | label partly rests on prior warnings, which are not observable |
+| quality issue/B441 | Poor | not analysed | |
+| demo Malayalam | – | Good (3.06, low confidence) | unlabelled; early version; non-English, unstable speaker separation |
 
-Feedback coverage on two recordings: 5/7 human themes covered; 29/29 evidence items grounded in the transcript;
-3/3 quotes verified.
+Pattern: mistakes are one level off, in both directions (B552 above, B472 and B491 below), so moving the cut-offs
+alone would not fix them. Feedback coverage on two recordings: 5/7 human themes covered; 29/29 evidence items
+grounded in the transcript; 3/3 quotes verified.
 
-*Calibration (leave-one-out accuracy, confusion matrix, held-out check) will be added after the final full run.*
+*Still to do: the full run with the latest version, then calibration (leave-one-out accuracy, confusion matrix,
+held-out check), using `scripts/run_samples.py --labelled-only --wait --consistent` and `scripts/calibrate.py`.*
 
 ## 6. Limitations and next steps
 
 - Ten labels: thresholds will move with more data; prefer collecting labels over tuning.
 - Speaker separation: a child-voice-aware embedding model, or Zoom's per-speaker audio where available, would
   make participation metrics more trustworthy.
-- Visual: a second logo template (B491's variant) would widen the detection margin.
+- Visual: tutors use slightly different 8x8 backgrounds; three logo templates cover the ones seen so far, and a
+  new variant would need its own template.
+- Teaching accuracy: the judge reads summaries, not the board, so claims about a position cannot be checked;
+  each reported mistake gets a second check, but a real mistake about a position would be missed.
 - Free tier: one class takes about 5–7 minutes (summaries are rate-limited); a paid tier would cut this to about a minute.

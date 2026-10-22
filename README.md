@@ -145,14 +145,19 @@ the configured key.
 ## Limitations
 
 - **Small calibration set**: 10 labelled classes (2 held out). Weights and thresholds are sanity-checked, not
-  validated; a few more labels could change them.
+  validated; a few more labels could change them. Latest agreement with 8x8's labels: 4 of 8 analysed classes,
+  with most misses one level off; the full run with the latest version is still to be done (see
+  [docs/approach.md](docs/approach.md#5-results-so-far-22102026)).
 - **Teacher/student separation is approximate**: 0.70 mean balanced accuracy against Zoom VTTs (0.94 down to
   chance on individual classes). Participation metrics carry this reliability, and the judge is told.
 - **Video is sampled**, every ~45 s: no claims of continuous observation. The 8x8 logo can only be checked when
-  the tutor's camera is full-size, and one tutor's logo version matches only weakly.
+  the tutor's camera is full-size; three logo templates cover the background versions seen so far.
 - **Not measured on purpose**: lighting (face brightness depends on skin tone), tone of voice, pitch, loudness,
   accent and speaking speed. Warmth is judged only from what is said.
 - **Non-English classes** (e.g. Malayalam) work but with less accurate transcription and extraction; confidence
   is lowered automatically.
 - **Not observable from a recording**: history with the tutor (e.g. prior warnings), preparation, punctuality.
-- Language-model outputs vary slightly between runs; the score is computed deterministically from their output.
+- **Teaching accuracy** is judged from summaries, not the board: remarks about a position are not scored, and each
+  reported mistake is double-checked before it can lower the label.
+- Language-model outputs can vary between runs (temperature is 0, but the summaries can differ when a backup
+  model is used); the score is computed deterministically from their output.

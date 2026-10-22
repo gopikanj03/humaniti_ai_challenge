@@ -209,3 +209,10 @@ The double-check was re-tested on 20b: the knight puzzle remark is withdrawn, "t
 Trade-off: with one model, sections are summarised one after another within its 8,000 tokens/min, so a long
 class takes longer. Owner follow-up: gpt-oss-120b stays as a backup, used only when 20b's daily limit is used
 up (the result then says a backup model was used).
+
+**Docs finished without the final full run (owner decision).** The owner chose to finish the documentation from
+the latest results rather than re-run all ten classes. Re-scoring the saved run files with the current rules was
+tried and rejected: those judgements predate the logo-template fix and the whole-class counting, so they would
+understate the system. docs/approach.md therefore reports the last full re-scoring (4 of 8 classes match, 22/10)
+plus later single-class checks, marks two classes as not analysed, and states clearly that the numbers are not
+final and how to produce them.
