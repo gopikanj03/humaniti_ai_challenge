@@ -74,9 +74,9 @@ See [docs/approach.md](docs/approach.md) for the design and results, and
 | `HOSTED_PROVIDER_APPROVED` | — | Must be `true` before any recording is sent to the hosted provider |
 | `TRANSCRIBE_MODEL` | `whisper-large-v3` | Speech-to-text model |
 | `CONDENSE_MODEL` | `openai/gpt-oss-20b` | Summarises each ~10 min section into timestamped events |
-| `JUDGE_MODEL` | `openai/gpt-oss-120b` | Scores the rubric from the evidence |
-| `CONDENSE_PARALLEL_MODELS` | `openai/gpt-oss-120b` | Extra model summarising sections in parallel (own per-minute allowance) |
-| `CONDENSE_FALLBACK_MODELS` / `JUDGE_FALLBACK_MODELS` | `openai/gpt-oss-120b` / `openai/gpt-oss-20b` | Tried when a model's free-tier daily limit is reached |
+| `JUDGE_MODEL` | `openai/gpt-oss-20b` | Scores the rubric from the evidence |
+| `CONDENSE_PARALLEL_MODELS` | empty | Extra models summarising sections in parallel (own per-minute allowance); none by default |
+| `CONDENSE_FALLBACK_MODELS` / `JUDGE_FALLBACK_MODELS` | `openai/gpt-oss-120b` | Used only when gpt-oss-20b's free-tier daily limit is reached |
 | `LOG_LEVEL` | `INFO` | Logs never include transcript text |
 | `FFMPEG_BIN` / `FFPROBE_BIN` | `ffmpeg` / `ffprobe` | Full paths if they are not on PATH |
 
@@ -123,10 +123,10 @@ that is waiting on rate limits.
    PROVIDER = "groq"
    TRANSCRIBE_MODEL = "whisper-large-v3"
    CONDENSE_MODEL = "openai/gpt-oss-20b"
-   CONDENSE_PARALLEL_MODELS = "openai/gpt-oss-120b"
+   CONDENSE_PARALLEL_MODELS = ""
    CONDENSE_FALLBACK_MODELS = "openai/gpt-oss-120b"
-   JUDGE_MODEL = "openai/gpt-oss-120b"
-   JUDGE_FALLBACK_MODELS = "openai/gpt-oss-20b"
+   JUDGE_MODEL = "openai/gpt-oss-20b"
+   JUDGE_FALLBACK_MODELS = "openai/gpt-oss-120b"
    ```
 5. **Deploy.** `packages.txt` installs ffmpeg; the speaker model downloads on first use.
 

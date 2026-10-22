@@ -202,3 +202,10 @@ the knight remark is withdrawn (B552 back to Excellent 3.92, no mistake), and a 
 straight" is kept. Also: temperature 0 (was 0.2) for steadier results, and a null "not a class" reason from the
 judge is now accepted instead of failing as invalid JSON. Part of B552's swing came from the summaries: the
 knight moment appears in some saved summaries and not others, so runs see different evidence.
+
+**Only gpt-oss-20b (owner decision).** Judge, summaries and the mistake double-check all use gpt-oss-20b; the
+parallel and fallback models are switched off (config, .env, .env.example, README, Streamlit secrets block).
+The double-check was re-tested on 20b: the knight puzzle remark is withdrawn, "the bishop moves straight" is kept.
+Trade-off: with one model, sections are summarised one after another within its 8,000 tokens/min, so a long
+class takes longer. Owner follow-up: gpt-oss-120b stays as a backup, used only when 20b's daily limit is used
+up (the result then says a backup model was used).

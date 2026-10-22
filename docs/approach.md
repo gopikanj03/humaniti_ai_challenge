@@ -33,7 +33,7 @@ observations. Constraints shaped most decisions:
 
 - **Confidential children's data**: nothing private is committed or logged; frames stay local; children are
   pseudonymised; uploads leave nothing on disk.
-- **Groq free tier only, open-source models** (whisper-large-v3, gpt-oss-20b, gpt-oss-120b): 8,000 tokens/min
+- **Groq free tier only, open-source models** (whisper-large-v3 and gpt-oss-20b; gpt-oss-120b only as a backup when 20b's daily limit is used up): 8,000 tokens/min
   per model, counted as prompt + `max_completion_tokens`.
 - **No fabricated evidence; no proxy biases** (pitch, loudness, accent, gender, speaking speed); silence can be
   productive and a quiet child is not necessarily disengaged.

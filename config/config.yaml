@@ -67,13 +67,13 @@ visual:
 
 llm:
   condense_model: openai/gpt-oss-20b    # fast model: per-chunk event extraction
-  judge_model: openai/gpt-oss-120b      # strongest available: final rubric judgement
+  judge_model: openai/gpt-oss-20b       # only gpt-oss-20b is used (owner's choice)
   # Each Groq model has its own free-tier allowance (gpt-oss-20b: 200k tokens/day). When one is used up,
   # the next model in the list is tried, and the result says so.
   # qwen/qwen3.8-27b is NOT usable on the free tier: 1,000 output tokens/min, below one summary (~1,500).
-  condense_parallel_models: [openai/gpt-oss-120b]   # extra lane: sections are summarised in parallel
-  condense_fallback_models: [openai/gpt-oss-120b]
-  judge_fallback_models: [openai/gpt-oss-20b]
+  condense_parallel_models: []   # extra models summarising sections in parallel (none: 20b only)
+  condense_fallback_models: [openai/gpt-oss-120b]   # only when 20b's daily limit is used up
+  judge_fallback_models: [openai/gpt-oss-120b]
   temperature: 0.0
   # Groq counts prompt + max_completion_tokens against the per-minute token limit, so each request
   # must fit max_request_tokens (free tier: 8000 TPM per model). Raise it on a paid tier.
