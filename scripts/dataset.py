@@ -131,5 +131,5 @@ HOLDOUT = ["good/B435", "weak/B558"]
 RUNS = DATA / "runs"
 
 
-def run_path(key: str) -> Path:
-    return RUNS / (key.replace("/", "__").replace(" ", "_") + ".json")
+def run_path(key: str, base: Path = RUNS) -> Path:
+    return base / (key.replace("/", "__").replace(" ", "_") + ".json")

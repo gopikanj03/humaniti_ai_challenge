@@ -12,15 +12,18 @@ import json
 import logging
 import re
 
+from pydantic import BaseModel
+
 from .condense import fmt_ts, parse_ts
 from .config import ROOT, get_config
-from .llm import chat_json, estimate_tokens, prompt_budget
+from .llm import LLMOutputError, chat_json, estimate_tokens, prompt_budget
 from .metrics import humanize
+from .net import ProviderError
 from .schemas import Assessment, ChunkDigest, DimensionScore, Event, EvidenceItem, Metric
 from .scoring import load_rubric
 
 log = logging.getLogger(__name__)
-PROMPT_VERSION = "judge-v10"
+PROMPT_VERSION = "judge-v12"
 EVIDENCE_TOLERANCE_S = 20.0
 
 DEFAULT_STYLE = """Write like an experienced 8x8 class reviewer: short, specific, practical. Each observation
@@ -57,7 +60,10 @@ Rules:
    promotion, notation, general principles). If the tutor teaches something wrong, cite the timestamp, quote
    it, state the correct fact, and lower the score clearly (a wrong basic rule is serious). Text that looks
    wrong because of speech-recognition errors is not a mistake. Claims about a specific board position
-   cannot be checked without the board: do not score them either way. If no mistakes are found in the
+   cannot be checked without the board: do not score them either way, and never list them as teaching
+   errors. While solving a puzzle, "with the knight we cannot do a checkmate" or "this pawn cannot capture"
+   is about the position on screen, not a rule. Only list a teaching error if the statement is false in
+   every position (e.g. "the bishop moves straight", "you can castle out of check"). If no mistakes are found in the
    explanations you were given, say so and score on clarity and correctness.
 9. First decide whether this is a class at all: a lesson where a teacher teaches learners (any subject or
    language). If it is something else (a film, vlog, song, game stream, advert, unrelated talk, or mostly noise),
@@ -67,6 +73,9 @@ Rules:
    what the tutor did and why it matters for the children. Never use metric variable names (write "homework
    was given", not "homework_given = true"), percentages of technical measures, or words like "events",
    "digests", "metrics", "segments" or "open-question share". Say "asked the children why..." instead.
+11. Never criticise pronunciation, odd words or misspelled names: the transcript is automatic and mishears
+   words (e.g. "rook" written as "Rukmo"). Improvements must be real teaching actions, not near-complete
+   results (do not list "9 of 10 children addressed" as a weakness).
 6. Scores use the rubric scale (0-5, decimals allowed). Be calibrated: 3 = adequate, not "good".
 
 Return JSON:
@@ -252,6 +261,8 @@ def _filter(items: list[EvidenceItem], event_times: list[float], has_visual: boo
             ok = has_visual and _visual_ok(it.timestamp, vtimes or [])
         elif it.source == "metric":
             ok = True  # metric evidence refers to the whole class; the numbers came from us
+            if parse_ts(it.timestamp.split("-")[0].strip()) is None:
+                it = it.model_copy(update={"timestamp": "whole class"})  # e.g. a dimension id instead of a time
         else:
             ok = _ts_ok(it.timestamp, event_times)
         if ok:
@@ -294,16 +305,80 @@ def verify(assessment: Assessment, digests: list[ChunkDigest], has_visual: bool,
                                          "teaching_errors": errors}), dropped + n1 + n2
 
 
+ERROR_CHECK_SYSTEM = """You double-check one possible teaching mistake in a children's chess class. You get
+what was said in the minute or so before and just after it, but not the board. Most "can"/"cannot" remarks
+made while the class works on a puzzle are about the position on screen ("with the knight we cannot do a
+checkmate" = not in this position; "this pawn cannot capture" = not here): they are NOT mistakes. Give the
+tutor the benefit of the doubt. Answer true only if the tutor clearly states a general rule or fact that is
+false in every position (e.g. "the bishop moves straight", "you can castle out of check", "a knight can never
+give checkmate").
+First decide what the statement is about: "general_rule" (a rule or fact meant to hold in every game),
+"this_position" (about the position being discussed) or "unclear". Then, only for a general rule, say whether
+it is false.
+Return JSON: {"about": "general_rule" | "this_position" | "unclear", "false_rule": true or false,
+"reason": "one short sentence"}"""
+
+
+class _ErrorCheck(BaseModel):
+    about: str = "unclear"
+    false_rule: bool = False
+    reason: str = ""
+
+    @property
+    def confirmed(self) -> bool:
+        return self.about == "general_rule" and self.false_rule
+
+
+def confirm_errors(errors: list[EvidenceItem], digests: list[ChunkDigest], file_hash: str) -> list[EvidenceItem]:
+    """A focused second opinion on each reported mistake: one mistake caps the label at Average, and the judge,
+    reading summaries without the board, sometimes takes a remark about a puzzle position for a wrong rule."""
+    lcfg = get_config()["llm"]
+    events = sorted((e for d in digests for e in d.events), key=lambda e: e.t)
+    kept = []
+    for err in errors:
+        t = parse_ts(err.timestamp.split("-")[0].strip())
+        near = [e for e in events if t is not None and -90 <= e.t - t <= 30]  # the puzzle set-up comes before
+        context = "\n".join(f"[{fmt_ts(e.t)}] {e.speaker}: {e.quote or e.detail}" for e in near)
+        # The judge's own claim is left out on purpose: it states the "correct fact" and anchors the check.
+        user = f"The possible mistake is what the tutor said at {err.timestamp}.\n\nWhat was said:\n{context}"
+        try:
+            check = chat_json([lcfg["judge_model"]] + lcfg.get("judge_fallback_models", []), ERROR_CHECK_SYSTEM,
+                              user, _ErrorCheck, max_tokens=600, reasoning_effort=lcfg.get("judge_reasoning_effort"),
+                              file_hash=file_hash, cache_tag="error-check-v3")
+        except (ProviderError, LLMOutputError):
+            log.warning("teaching mistake at %s could not be double-checked; keeping the judge's verdict",
+                        err.timestamp)
+            kept.append(err)
+            continue
+        if check.confirmed:
+            kept.append(err)
+        else:
+            log.info("teaching mistake at %s dropped by the second check", err.timestamp)
+    return kept
+
+
 def evaluate(digests: list[ChunkDigest], metrics: list[Metric], meta: dict, file_hash: str,
              visual: list[str] | None = None) -> tuple[Assessment, int]:
     lcfg = get_config()["llm"]
     max_tokens = lcfg["judge_max_tokens"]
     user = build_prompt(digests, metrics, visual, meta, budget_tokens=prompt_budget(max_tokens, SYSTEM))
-    raw = chat_json([lcfg["judge_model"]] + lcfg.get("judge_fallback_models", []), SYSTEM, user, Assessment,
-                    max_tokens=max_tokens,
-                    reasoning_effort=lcfg.get("judge_reasoning_effort"), file_hash=file_hash,
-                    cache_tag=PROMPT_VERSION)
-    assessment, dropped = verify(raw, digests, has_visual=bool(visual), vtimes=visual_times(visual))
+    judge = lambda prompt: chat_json(  # noqa: E731
+        [lcfg["judge_model"]] + lcfg.get("judge_fallback_models", []), SYSTEM, prompt, Assessment,
+        max_tokens=max_tokens, reasoning_effort=lcfg.get("judge_reasoning_effort"), file_hash=file_hash,
+        cache_tag=PROMPT_VERSION)
+    check = lambda a: verify(a, digests, has_visual=bool(visual), vtimes=visual_times(visual))  # noqa: E731
+    assessment, dropped = check(judge(user))
+    if assessment.teaching_errors:
+        confirmed = confirm_errors(assessment.teaching_errors, digests, file_hash)
+        withdrawn = [e for e in assessment.teaching_errors if e not in confirmed]
+        if withdrawn:
+            # Judge again with the result of the check, so the summary, scores and improvements all agree.
+            note = "\n\n# Checked before this assessment\n" + "\n".join(
+                f"- {e.timestamp}: this remark is about the position on the board, not a wrong rule. It is NOT a "
+                "teaching mistake: do not list it or lower any score for it." for e in withdrawn)
+            assessment, dropped = check(judge(user + note))
+            assessment = assessment.model_copy(update={"teaching_errors": [
+                e for e in assessment.teaching_errors if e.timestamp not in {w.timestamp for w in withdrawn}]})
     log.info("judge: %d dimensions scored, %d evidence items dropped",
              sum(d.score is not None for d in assessment.dimensions), dropped)
     return assessment, dropped

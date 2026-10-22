@@ -136,6 +136,11 @@ class Assessment(BaseModel):
     not_class_reason: str = ""
     confidence: float = Field(ge=0, le=1)
 
+    @field_validator("not_class_reason", mode="before")
+    @classmethod
+    def _null_reason(cls, v: str | None) -> str:
+        return v or ""  # the judge often sends null when it is a class
+
 
 class ScoreResult(BaseModel):
     label: Literal["Poor", "Average", "Good", "Excellent"]

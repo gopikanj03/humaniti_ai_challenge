@@ -22,7 +22,8 @@ METRIC_LABELS = {
     "questions_per_10min": "Questions per 10 min", "open_question_share": "Open questions share",
     "question_response_rate": "Questions answered", "median_wait_time_s": "Median wait after question",
     "students_addressed_individually": "Children addressed individually", "students_named_total": "Children named",
-    "praise_count": "Praise moments", "greeting_or_rapport_in_first_10min": "Greeting / rapport early",
+    "praise_count": "Praise moments", "name_calls_per_10min": "Children called by name (per 10 min)",
+    "praise_per_10min": "Praise (per 10 min)", "greeting_or_rapport_in_first_10min": "Greeting / rapport early",
     "homework_given": "Homework given", "recap_or_conclusion_in_last_10min": "Recap / closing at the end",
     "technical_issues": "Technical issues", "unverifiable_events_dropped": "Unverifiable moments dropped",
     "language": "Language", "transcription_confidence": "Transcription clarity",
@@ -162,8 +163,53 @@ def transcript_metrics(t: Transcript) -> list[Metric]:
     ]
 
 
-def compute_all(t: Transcript, spk: SpeakerResult | None, digests: list[ChunkDigest]) -> list[Metric]:
+# Praise phrases in English plus a few common Hindi / Malayalam ones (transcripts can be mixed-language).
+PRAISE_RE = re.compile(
+    r"\b(well done|very good|good job|good work|good answer|excellent|great|awesome|brilliant|perfect|superb|"
+    r"fantastic|amazing|super|nice (move|work|one|job|try)|that'?s (right|correct)|you got it|correct answer|"
+    r"shabash|shabaash|bahut (accha|achha|badhiya)|badhiya|kollam|adipoli|nannayi|mitukk\w*)\b", re.I)
+
+
+def whole_class_counts(segments: list[Segment], spk: SpeakerResult | None, names) -> dict:
+    """Count, over the WHOLE transcript, the children the tutor calls by name and the tutor's praise.
+
+    The event digests keep at most ~20 moments per section, so quick name-calls and praise drop out of them
+    and were undercounted. Names come from the digests' name map (raw names stay in memory, only pseudonyms
+    are reported); lines confidently attributed to children are skipped.
+    """
+    from .condense import _norm
+
+    reliable = spk is not None and spk.teacher_share is not None and spk.confidence >= 0.4
+    tutor = [x for x in segments if x.speaker != "student"] if reliable else list(segments)
+    called: dict[str, int] = {}
+    for raw, alias in (names.students.items() if names else []):
+        parts = [raw] + [w for w in raw.split() if len(w) >= 3]
+        pattern = re.compile(r"(?<!\w)(" + "|".join(re.escape(w) for w in parts) + r")(?!\w)")
+        hits = sum(1 for x in tutor if pattern.search(_norm(x.text)))
+        if hits:
+            called[alias] = hits
+    praise = sum(1 for x in tutor if PRAISE_RE.search(x.text) and not x.text.strip().endswith("?"))
+    return {"called": called, "praise": praise}
+
+
+def compute_all(t: Transcript, spk: SpeakerResult | None, digests: list[ChunkDigest], names=None) -> list[Metric]:
     regions = spk.speech_regions if spk else []
     segs = t.usable_segments()
-    return (audio_metrics(regions, t.duration_s) + speaker_metrics(segs, spk, t.duration_s)
-            + event_metrics(digests, segs, t.duration_s) + transcript_metrics(t))
+    metrics = (audio_metrics(regions, t.duration_s) + speaker_metrics(segs, spk, t.duration_s)
+               + event_metrics(digests, segs, t.duration_s) + transcript_metrics(t))
+    if not digests:
+        return metrics
+    whole = whole_class_counts(segs, spk, names)
+    per10 = max(t.duration_s / 600, 1e-6)
+    for m in metrics:
+        # Whole-class counts replace digest counts when they find more (digests only sample the class).
+        if m.name == "students_addressed_individually" and len(whole["called"]) > (m.value or 0):
+            m.value, m.note = len(whole["called"]), "distinct children the tutor called by name (whole class)"
+        if m.name == "praise_count" and whole["praise"] > (m.value or 0):
+            m.value, m.note = whole["praise"], "tutor lines with praise across the whole class"
+    metrics.append(Metric(name="name_calls_per_10min", value=_r(sum(whole["called"].values()) / per10, 1),
+                          source="transcript", reliability="medium",
+                          note="times the tutor said a child's name, per 10 minutes"))
+    metrics.append(Metric(name="praise_per_10min", value=_r(whole["praise"] / per10, 1), source="transcript",
+                          reliability="medium", note="tutor lines with praise, per 10 minutes"))
+    return metrics

@@ -219,9 +219,10 @@ def run(src_path: str | Path | None = None, on_stage: StageFn | None = None, *,
                 warnings += spk.warnings
 
         digests: list[ChunkDigest] = []
+        names = None
         if transcript.usable_segments():
             notify("Summarising the class", 0.0, "Reading the class section by section")
-            digests, _names = condense(transcript, file_hash,
+            digests, names = condense(transcript, file_hash,
                                        on_progress=lambda i, n: notify("Summarising the class", i / max(n, 1),
                                                                        f"{i} of {n} sections summarised"))
 
@@ -235,7 +236,7 @@ def run(src_path: str | Path | None = None, on_stage: StageFn | None = None, *,
                 warnings.append("Video frames could not be analysed; camera and background were not assessed.")
 
         notify("Computing metrics", 0.0, "Counting questions, answers, praise and talk time")
-        metrics = compute_all(transcript, spk, digests) + (vis.metrics if vis else [])
+        metrics = compute_all(transcript, spk, digests, names) + (vis.metrics if vis else [])
         if info.height:
             metrics.append(Metric(name="video_height", value=info.height, unit="px", source="visual",
                                   note="recording quality: vertical resolution"))

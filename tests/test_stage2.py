@@ -296,3 +296,71 @@ def test_vad_blocks_join_speech_across_boundaries(monkeypatch):
     monkeypatch.setattr(vad, "get_speech_timestamps", lambda x, o, sampling_rate: next(calls))
     regions = audio.speech_regions(np.zeros(20 * sr, dtype=np.int16), sr)
     assert regions == [(8.0, 13.0)]
+
+
+@pytest.mark.parametrize("text,ok", [("Very good, well done!", True), ("Shabash beta", True), ("great move there", True),
+                                     ("Is this correct?", False), ("It is a supermarket", False)])
+def test_praise_pattern(text, ok):
+    from src.metrics import PRAISE_RE
+    assert bool(PRAISE_RE.search(text)) == ok
+
+
+def test_whole_class_counts_names_and_praise_from_tutor_lines_only():
+    from src.metrics import whole_class_counts
+    from src.speakers import SpeakerResult
+    names = NameMap()
+    names.student("Arjun Kumar"), names.student("Meera")
+    segs = [Segment(start=0, end=2, text="Arjun, your move.", speaker="teacher"),
+            Segment(start=3, end=5, text="Well done, Arjun!", speaker="teacher"),
+            Segment(start=6, end=8, text="Is that correct?", speaker="teacher"),       # a question, not praise
+            Segment(start=9, end=10, text="Meera great!", speaker="student")]           # a child talking
+    spk = SpeakerResult(teacher_share=0.7, confidence=0.6)
+    out = whole_class_counts(segs, spk, names)
+    assert out == {"called": {names.students["arjun kumar"]: 2}, "praise": 1}
+    # Unreliable speaker separation: every line counts.
+    out = whole_class_counts(segs, SpeakerResult(teacher_share=0.7, confidence=0.2), names)
+    assert len(out["called"]) == 2 and out["praise"] == 2
+
+
+def test_metric_evidence_without_a_time_becomes_whole_class():
+    from src.evaluator import _filter
+    kept, dropped = _filter([EvidenceItem(timestamp="individual_engagement", observation="x", source="metric")], [], False)
+    assert dropped == 0 and kept[0].timestamp == "whole class"
+
+
+def test_null_not_class_reason_is_accepted():
+    a = Assessment(summary="", dimensions=[], confidence=0.5, not_class_reason=None)
+    assert a.not_class_reason == ""
+
+
+def test_withdrawn_teaching_mistake_triggers_one_rejudge(monkeypatch):
+    monkeypatch.setattr(evaluator, "load_rubric", lambda: {"dimensions": [{"id": "a", "weight": 1}]})
+    monkeypatch.setattr(evaluator, "build_prompt", lambda *a, **k: "PROMPT")
+    ev = EvidenceItem(timestamp="10:12", observation="Tutor said the knight cannot checkmate")
+    first = Assessment(summary="slip", confidence=0.7, teaching_errors=[ev],
+                       dimensions=[DimensionScore(dimension="a", score=2.5, evidence=[ev])])
+    second = Assessment(summary="fine", confidence=0.7,
+                        dimensions=[DimensionScore(dimension="a", score=4, evidence=[ev])])
+    prompts = []
+
+    def fake_chat(models, system, user, schema, **k):
+        prompts.append(user)
+        if schema is evaluator._ErrorCheck:
+            return evaluator._ErrorCheck(about="this_position", false_rule=False)
+        return first if len(prompts) == 1 else second
+
+    monkeypatch.setattr(evaluator, "chat_json", fake_chat)
+    digests = [ChunkDigest(chunk_index=0, start=600, end=700, summary="",
+                           events=[Event(t=612, type="corrective_feedback", speaker="teacher", detail="d",
+                                         quote="With the knight we cannot do a checkmate.")])]
+    out, _ = evaluator.evaluate(digests, [], {}, "h")
+    assert len(prompts) == 3 and "Checked before this assessment" in prompts[2]   # judge, check, judge again
+    assert out.teaching_errors == [] and out.summary == "fine" and out.dimensions[0].score == 4
+
+
+def test_confirmed_teaching_mistake_is_kept_without_rejudge(monkeypatch):
+    ev = EvidenceItem(timestamp="01:00", observation="Tutor said the bishop moves straight")
+    calls = []
+    monkeypatch.setattr(evaluator, "chat_json", lambda *a, **k: calls.append(1) or
+                        evaluator._ErrorCheck(about="general_rule", false_rule=True))
+    assert evaluator.confirm_errors([ev], _digest([60.0]), "h") == [ev] and len(calls) == 1

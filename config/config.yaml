@@ -74,7 +74,7 @@ llm:
   condense_parallel_models: [openai/gpt-oss-120b]   # extra lane: sections are summarised in parallel
   condense_fallback_models: [openai/gpt-oss-120b]
   judge_fallback_models: [openai/gpt-oss-20b]
-  temperature: 0.2
+  temperature: 0.0
   # Groq counts prompt + max_completion_tokens against the per-minute token limit, so each request
   # must fit max_request_tokens (free tier: 8000 TPM per model). Raise it on a paid tier.
   max_request_tokens: 7500

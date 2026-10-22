@@ -171,3 +171,34 @@ recording", with the reason. Checked on a 60 s pink-noise clip: speech 0%, Poor,
 **Hosting: "The app is not set up correctly".** On Streamlit Cloud the app could not see its Groq settings. The
 app now copies Streamlit's Secrets into the environment at start-up, so it no longer depends on how Streamlit
 exposes them; the error message tells an administrator which secrets to check. PDF dates are now day/month/year.
+
+**Undercounted attention and praise (owner test on excellent/B472, 8x8: Excellent, ours: Good 3.7).** The event
+summaries keep at most about 20 moments per section, so quick name-calls and praise dropped out, and the judge
+saw fewer children addressed than there were. Names and praise are now also counted over the whole transcript
+in plain Python (no extra AI calls): the children's names from the summaries' name map, matched in tutor lines
+only when speaker separation is reliable; praise from a list of English, Hindi and Malayalam phrases, skipping
+questions ("Is that correct?"). The larger count wins and the per-10-minute rates go to the judge. Checked on 4
+cached classes without reading the transcript text: children called B472 3 -> 6, B552 5 -> 9, B482 (weak) 4 -> 4,
+B435 1 -> 1; praise per 10 min matched Zoom's own transcript closely (B552 2.0 vs 2.0, B482 0.0 vs 0.0). A first
+version of the phrase list never matched because of an escaping mistake (praise 0 everywhere); caught by the
+check and fixed. That first check also re-ran some summaries, using part of the day's free allowance.
+
+**Judge criticised transcription errors (owner test on good/B552).** An improvement read "correct mispronounced
+piece name (Rukmo)": almost certainly the speech-to-text mishearing "rook", not the tutor. New judge rule
+(judge-v11): never criticise pronunciation, odd words or misspelled names, and do not list near-complete
+results ("9 of 10 children addressed") as weaknesses. Re-judged B552: the item is gone. A measured item had a
+rubric id instead of a time; such items are now shown as "Overall".
+
+**False teaching mistake swung a class from Excellent to Average (owner test on good/B552).** While solving a
+puzzle the tutor said "with the knight we cannot do a checkmate" (in that position). The judge listed it as a
+wrong rule, and one mistake caps the label at Average. A stronger prompt rule (judge-v12) did not stop it. Now
+each reported mistake gets a short second check (a few hundred tokens): it sees what was said in the 90 s
+before and 30 s after, not the judge's claim (which states a "correct fact" and anchored the check), and must
+first classify the remark as a general rule, about this position, or unclear. Only a false general rule
+counts. If a mistake is withdrawn, the judge runs once more with that note, so the summary, scores and
+improvements agree. First version asked "wrong in every position: true/false" and the model answered the
+inverse question ("knights can mate in certain positions"); the classification fixed it. Checked both ways:
+the knight remark is withdrawn (B552 back to Excellent 3.92, no mistake), and a made-up "the bishop moves
+straight" is kept. Also: temperature 0 (was 0.2) for steadier results, and a null "not a class" reason from the
+judge is now accepted instead of failing as invalid JSON. Part of B552's swing came from the summaries: the
+knight moment appears in some saved summaries and not others, so runs see different evidence.

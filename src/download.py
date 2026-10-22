@@ -69,11 +69,25 @@ def download(url: str, out_dir: str | Path, on_progress: ProgressFn | None = Non
         "logger": _SilentLogger(),  # yt-dlp's own messages echo URLs/titles; we report errors ourselves
         "ffmpeg_location": _ffmpeg_dir(),
     }
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-    except yt_dlp.utils.DownloadError as e:
-        raise MediaError(_friendly(str(e))) from None
+    info, last_error = None, ""
+    # YouTube often blocks cloud servers with a bot check for its default web player but still serves other
+    # player types, so on a bot check we retry as those before giving up.
+    for clients in (None, ["tv", "mweb"], ["web_safari", "ios"]):
+        attempt = dict(opts)
+        if clients:
+            attempt["extractor_args"] = {"youtube": {"player_client": clients}}
+        try:
+            with yt_dlp.YoutubeDL(attempt) as ydl:
+                info = ydl.extract_info(url, download=True)
+            last_error = ""
+            break
+        except yt_dlp.utils.DownloadError as e:
+            last_error = str(e)
+            if not _is_bot_check(last_error):
+                break
+            log.warning("link blocked by a bot check; retrying with another player type")
+    if last_error:
+        raise MediaError(_friendly(last_error)) from None
 
     if info is None:  # rejected by match_filter
         raise MediaError(f"The recording is longer than the {max_dur // 60}-minute limit.")
@@ -98,8 +112,16 @@ def _ffmpeg_dir() -> str | None:
     return str(Path(exe).parent) if exe else None
 
 
+def _is_bot_check(err: str) -> bool:
+    low = err.lower()
+    return "not a bot" in low or "confirm you" in low or ("sign in" in low and "youtube" in low)
+
+
 def _friendly(err: str) -> str:
     low = err.lower()
+    if _is_bot_check(err):
+        return ("YouTube did not allow this server to download the video (it blocks many cloud servers). Please "
+                "download the video and upload the file instead.")
     if any(k in low for k in ("sign in", "login", "private", "permission", "403", "401", "access denied")):
         return ("The link is private. Share it as 'Anyone with the link can view' (Google Drive / Zoom), "
                 "or download the recording and upload the file instead.")

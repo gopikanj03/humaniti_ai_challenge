@@ -128,3 +128,33 @@ def test_language_lock_replaces_misdetected_chunk_only_if_more_confident(monkeyp
     per_chunk = [[seg("English", -0.2)], [seg("Malayalam", -0.4)], [seg("Malayalam", -0.5)]]
     tr._lock_language(chunks, per_chunk, ["groq"] * 3, "hash")
     assert per_chunk[0][0]["language"] == "English"     # a confident English stretch survives
+
+
+def test_youtube_bot_check_is_not_reported_as_a_private_link():
+    from src.download import _friendly, _is_bot_check
+    err = "ERROR: [youtube] mbZIjNKlxuY: Sign in to confirm you're not a bot. Use --cookies-from-browser"
+    assert _is_bot_check(err)
+    assert "did not allow this server" in _friendly(err) and "private" not in _friendly(err).lower()
+    assert "private" in _friendly("ERROR: This video is private").lower()
+
+
+def test_bot_check_retries_with_other_player_types(monkeypatch, tmp_path):
+    import yt_dlp
+    from src import download
+    tried = []
+
+    class FakeYDL:
+        def __init__(self, opts): self.opts = opts
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def extract_info(self, url, download):
+            tried.append((self.opts.get("extractor_args") or {}).get("youtube", {}).get("player_client"))
+            if len(tried) < 2:
+                raise yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot")
+            (tmp_path / "download.mp4").write_bytes(b"x")
+            return {"duration": 50}
+
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYDL)
+    monkeypatch.setattr(download, "check_url", lambda u: u)
+    assert download.download("https://youtube.com/shorts/x", tmp_path).name == "download.mp4"
+    assert tried == [None, ["tv", "mweb"]]

@@ -42,7 +42,8 @@ def main() -> None:
     notes = "\n".join(f"[{f.label}] {scrub_names(f.text, f.tutor_tokens)}"
                       for f in sorted(feedback.values(), key=lambda f: LABELS.index(f.label), reverse=True))
     lcfg = get_config()["llm"]
-    gists = chat_json(lcfg["judge_model"], SYSTEM, notes, Gists, max_tokens=1500, reasoning_effort="low")
+    gists = chat_json([lcfg["judge_model"]] + lcfg.get("judge_fallback_models", []), SYSTEM, notes, Gists,
+                      max_tokens=1500, reasoning_effort="low")
 
     runs = load_runs()
     anchors = {}

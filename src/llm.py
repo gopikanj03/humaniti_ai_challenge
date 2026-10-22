@@ -159,7 +159,11 @@ def _chat_json_one(model: str, system: str, user: str, schema: type[T], *, max_t
                                         "Return only valid JSON in the required format."}]
         except (json.JSONDecodeError, ValidationError) as e:
             # Log the error type and size only: the raw output can contain transcript content.
-            log.warning("%s: invalid JSON from %s (attempt %d, %d chars)", cache_tag, model, attempt + 1, len(raw))
+            # Field locations and error types only (never values): enough to diagnose without leaking content.
+            detail = (", ".join(f"{'.'.join(str(x) for x in err['loc'])}:{err['type']}" for err in e.errors()[:6])
+                      if isinstance(e, ValidationError) else f"not JSON at char {getattr(e, 'pos', '?')}")
+            log.warning("%s: invalid JSON from %s (attempt %d, %d chars): %s", cache_tag, model, attempt + 1,
+                        len(raw), detail)
             if attempt == 1:
                 raise LLMOutputError(f"{cache_tag}: model returned invalid JSON twice") from None
             # Don't echo the bad reply back: it would blow the per-request token budget.
