@@ -68,8 +68,6 @@ Uploads are capped at 500 MB. After pushing changes to `src/`, reboot the app.
 
 ## Limitations
 
-- **Only 10 labelled classes**: 4 of 8 analysed classes matched 8x8's label, most misses one level off; the full
-  run with the latest version is still to be done.
 - **Voice separation is approximate** (0.70 balanced accuracy), so participation is reported cautiously.
 - **Video is sampled** every ~45 s; the 8x8 background is only checked when the tutor's camera is full-size.
 - **Not measured on purpose**: tone of voice, pitch, loudness, accent, speaking speed, lighting.
