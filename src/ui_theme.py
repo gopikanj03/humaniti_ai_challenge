@@ -30,19 +30,24 @@ FONTS_URL = ("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,
              "&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap")
 
 
-def css(theme: str) -> str:
+def css() -> str:
     # Streamlit's markdown ends an HTML block at the first blank line, so the stylesheet must have none.
-    return "\n".join(line for line in _css(theme).splitlines() if line.strip())
+    return "\n".join(line for line in _css().splitlines() if line.strip())
 
 
-def _css(theme: str) -> str:
-    p = PALETTES[theme]
-    variables = "\n".join(f"  --{k}: {v};" for k, v in p.items())
+def _css() -> str:
+    # Both palettes are always present; the browser switches between them via `data-theme` on <html>,
+    # so changing theme never re-runs the app (which would stop an analysis in progress).
+    light = "\n".join(f"  --{k}: {v};" for k, v in PALETTES["light"].items())
+    dark = "\n".join(f"  --{k}: {v};" for k, v in PALETTES["dark"].items())
     return f"""
 <link rel="stylesheet" href="{FONTS_URL}">
 <style>
+:root[data-theme="dark"] {{
+{dark}
+}}
 :root {{
-{variables}
+{light}
   --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-display: 'Bricolage Grotesque', 'Plus Jakarta Sans', sans-serif;
   --radius: 18px;
@@ -150,6 +155,23 @@ h1.app-title {{
 .stButton > button:hover {{ transform: translateY(-1px); filter: brightness(1.05); color: var(--accent-text); }}
 .stButton > button:disabled {{ opacity: 0.45; box-shadow: none; transform: none; }}
 
+/* Theme switch: a plain button in the page itself (not a Streamlit widget), so it never re-runs the app */
+#cc-theme-toggle {{
+  position: fixed; top: 22px; right: 28px; z-index: 1000; display: flex; align-items: center; gap: 0.5rem;
+  background: transparent; border: none; cursor: pointer; padding: 4px 6px; border-radius: 99px;
+  font: 600 0.85rem var(--font-body); color: var(--muted);
+}}
+#cc-theme-toggle:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 2px; }}
+#cc-theme-toggle .cc-track {{
+  position: relative; width: 34px; height: 20px; border-radius: 99px; transition: background .2s;
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+}}
+#cc-theme-toggle .cc-knob {{
+  position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff;
+  transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}}
+:root[data-theme="dark"] #cc-theme-toggle .cc-track {{ background: var(--accent); }}
+:root[data-theme="dark"] #cc-theme-toggle .cc-knob {{ transform: translateX(14px); }}
 /* Theme toggle */
 [data-testid="stToggle"] label, [data-testid="stToggle"] p {{ color: var(--muted) !important; font-size: 0.85rem; }}
 
@@ -252,6 +274,33 @@ code {{ background: color-mix(in srgb, var(--accent) 14%, transparent) !importan
   display: inline-block; margin-top: 0.45rem; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem;
   border-radius: 99px; background: color-mix(in srgb, var(--accent-2) 30%, transparent); color: var(--text);
 }}
+/* plain-language result card */
+.cc-meaning {{ flex: 1; }}
+.stApp .cc-meaning p {{ margin: 0.3rem 0 0; font-size: 1.05rem; line-height: 1.5; }}
+.cc-scorebox {{ margin-top: 1.2rem; }}
+.cc-scale {{ position: relative; margin-top: 0.5rem; padding-bottom: 0.2rem; }}
+.cc-bands {{ display: flex; gap: 3px; }}
+.cc-band {{
+  height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font-size: 0.78rem; font-weight: 600; color: var(--muted); background: color-mix(in srgb, var(--accent) 10%, transparent);
+}}
+.cc-band.on {{ color: var(--text); background: color-mix(in srgb, var(--label) 45%, transparent); }}
+.cc-marker {{
+  position: absolute; top: -5px; width: 4px; height: 40px; margin-left: -2px; border-radius: 4px;
+  background: var(--text); box-shadow: 0 0 0 2px var(--surface-strong);
+}}
+.cc-sure {{ margin-top: 1rem; font-size: 0.95rem; line-height: 1.55; }}
+.stApp h3.cc-sub {{ margin-top: 1.1rem; }}
+.cc-why {{ margin: 0.2rem 0 0; padding-left: 1.2rem; line-height: 1.6; }}
+.cc-question {{ font-size: 0.88rem; color: var(--muted); margin-top: 0.15rem; }}
+.cc-rating {{ font-size: 0.78rem; font-weight: 700; padding: 0.22rem 0.7rem; border-radius: 99px; white-space: nowrap; color: var(--text); }}
+.cc-rating.strong {{ background: color-mix(in srgb, var(--accent-3) 38%, transparent); }}
+.cc-rating.fine {{ background: color-mix(in srgb, var(--accent) 22%, transparent); }}
+.cc-rating.needs-work {{ background: color-mix(in srgb, var(--accent-4) 45%, transparent); }}
+.cc-rating.weak {{ background: color-mix(in srgb, var(--accent-2) 40%, transparent); }}
+.cc-rating.not-checked {{ background: color-mix(in srgb, var(--muted) 18%, transparent); }}
+.cc-examples {{ margin-top: 0.5rem; }}
+.cc-examples summary {{ cursor: pointer; font-size: 0.88rem; font-weight: 600; color: var(--accent); }}
 .cc-reasons {{ margin-top: 0.7rem; font-size: 0.88rem; color: var(--muted); }}
 .cc-reasons summary {{ cursor: pointer; font-weight: 600; }}
 /* evidence */
@@ -298,11 +347,13 @@ code {{ background: color-mix(in srgb, var(--accent) 14%, transparent) !importan
 """
 
 
-def background_js(theme: str) -> str:
-    """Injects (once) a full-screen canvas into the parent page and keeps its theme in sync.
+def background_js() -> str:
+    """Injects (once) the light/dark switch and a full-screen 3D canvas into the parent page.
 
-    Streamlit renders components in an iframe that is re-created on every rerun, so the animation code is
-    added to the PARENT document as a <script>; it then survives reruns. Pointer events pass through.
+    Streamlit renders components in an iframe that is re-created on every rerun, so this code is added to the
+    PARENT document as a <script>; it then survives reruns. The theme lives entirely in the browser
+    (`data-theme` on <html>, remembered in localStorage): switching it never contacts the server, so an
+    analysis in progress keeps running. Canvas pointer events pass through.
     """
     colours = {name: {"accents": [p["accent"], p["accent-2"], p["accent-3"], p["accent-4"]], "line": p["accent"]}
                for name, p in PALETTES.items()}
@@ -310,7 +361,6 @@ def background_js(theme: str) -> str:
 <script>
 (function () {{
   const doc = window.parent.document;
-  doc.documentElement.setAttribute('data-theme', '{theme}');
   if (doc.getElementById('bg3d-script')) return;          // already running in the parent page
   const s = doc.createElement('script');
   s.id = 'bg3d-script';
@@ -318,6 +368,25 @@ def background_js(theme: str) -> str:
   doc.body.appendChild(s);
 
   function bg3d(COLOURS) {{
+    // ---- light/dark switch (browser-only: no app re-run, so analyses keep going) ----
+    const root = document.documentElement;
+    let saved = null;
+    try {{ saved = localStorage.getItem('cc-theme'); }} catch (e) {{}}
+    root.setAttribute('data-theme', saved === 'dark' ? 'dark' : 'light');
+    const btn = document.createElement('button');
+    btn.id = 'cc-theme-toggle'; btn.type = 'button'; btn.setAttribute('role', 'switch');
+    btn.setAttribute('aria-label', 'Dark mode');
+    btn.innerHTML = '<span class="cc-track"><span class="cc-knob"></span></span><span>Dark</span>';
+    const sync = () => btn.setAttribute('aria-checked', String(root.getAttribute('data-theme') === 'dark'));
+    btn.addEventListener('click', () => {{
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try {{ localStorage.setItem('cc-theme', next); }} catch (e) {{}}
+      sync();
+    }});
+    sync();
+    document.body.appendChild(btn);
+
     const cv = document.createElement('canvas');
     cv.id = 'bg3d';
     Object.assign(cv.style, {{position: 'fixed', inset: '0', width: '100vw', height: '100vh',

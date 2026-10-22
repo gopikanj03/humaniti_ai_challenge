@@ -20,7 +20,7 @@ from .schemas import Assessment, ChunkDigest, DimensionScore, Event, EvidenceIte
 from .scoring import load_rubric
 
 log = logging.getLogger(__name__)
-PROMPT_VERSION = "judge-v8"
+PROMPT_VERSION = "judge-v9"
 EVIDENCE_TOLERANCE_S = 20.0
 
 DEFAULT_STYLE = """Write like an experienced 8x8 class reviewer: short, specific, practical. Each observation
@@ -59,8 +59,10 @@ Rules:
    wrong because of speech-recognition errors is not a mistake. Claims about a specific board position
    cannot be checked without the board: do not score them either way. If no mistakes are found in the
    explanations you were given, say so and score on clarity and correctness.
-9. Write for a teacher or manager in plain English: never use metric variable names (e.g. write
-   "homework was given", not "homework_given = true").
+9. Write for a parent or a manager with no technical background: short, plain English sentences that say
+   what the tutor did and why it matters for the children. Never use metric variable names (write "homework
+   was given", not "homework_given = true"), percentages of technical measures, or words like "events",
+   "digests", "metrics", "segments" or "open-question share". Say "asked the children why..." instead.
 6. Scores use the rubric scale (0-5, decimals allowed). Be calibrated: 3 = adequate, not "good".
 
 Return JSON:

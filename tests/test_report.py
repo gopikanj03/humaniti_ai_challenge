@@ -50,3 +50,29 @@ def test_reports_contain_no_emojis_and_no_transcript():
 def test_humanize_replaces_metric_names():
     assert humanize("recap_or_conclusion_in_last_10min = true") == "recap / closing at the end: yes"
     assert humanize("2+2=4 and Student 3") == "2+2=4 and Student 3"
+
+
+def test_plain_language_helpers():
+    from src import explain
+    from src.schemas import ScoreResult
+    assert [explain.rating(x) for x in (4.5, 3.2, 2.1, 1.0, None)] == ["Strong", "Fine", "Needs work", "Weak", "Not checked"]
+    assert explain.certainty(0.8) == "Fairly sure" and explain.certainty(0.3) == "Not very sure"
+    assert "voice" in explain.plain_reason("Teacher/student voice separation is uncertain (confidence 0.37).")
+    assert "Malayalam" in explain.plain_reason("Class language is Malayalam; transcription is less accurate.")
+    qi = ScoreResult(label="Poor", score=3.5, confidence=0.6, low_confidence=False, weight_coverage=1, quality_issue=True)
+    assert "recording" in explain.label_meaning(qi).lower()
+
+
+def test_main_reasons_lead_with_rules_then_weak_and_strong_areas():
+    from src import explain
+    from src.scoring import load_rubric
+    from src.schemas import ScoreResult
+    a = Assessment(summary="", confidence=0.7, dimensions=[
+        DimensionScore(dimension="warmth_energy", score=1.5, rationale="Little praise. Mostly instructions."),
+        DimensionScore(dimension="teaching_accuracy", score=4.5, rationale="All explanations were correct.")])
+    r = ScoreResult(label="Average", score=3.0, confidence=0.7, low_confidence=False, weight_coverage=1,
+                    rules_applied=["No homework and no recap or closing."])
+    reasons = explain.main_reasons(r, a, load_rubric())
+    assert reasons[0].startswith("No homework")
+    assert any("Warmth And Energy needs work: Little praise." == x for x in reasons)
+    assert reasons[-1].startswith("Teaching Accuracy was a strength")

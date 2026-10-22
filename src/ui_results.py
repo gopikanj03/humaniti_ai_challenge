@@ -10,6 +10,7 @@ import json
 from html import escape
 
 from .pipeline import PipelineResult, summarize
+from . import explain
 from .scoring import load_rubric
 from .metrics import METRIC_LABELS
 from .transcribe import LANGUAGE_NAMES
@@ -25,7 +26,6 @@ STEPS = [
 ]
 LABEL_COLOUR = {"Excellent": "var(--accent)", "Good": "var(--accent-3)", "Average": "var(--accent-4)",
                 "Poor": "var(--accent-2)"}
-SOURCE_LABEL = {"transcript": "Transcript", "metric": "Metric", "visual": "Video"}
 STATUS_TEXT = {"used": "Used", "partial": "Partial", "missing": "Missing"}
 
 
@@ -99,21 +99,29 @@ TIPS = [
 ]
 
 
-def live_tips_html(palette: dict) -> str:
-    """Typical duration and rotating tips, animated in the browser (keeps moving while the server waits)."""
+def live_tips_html(palettes: dict) -> str:
+    """Typical duration and rotating tips, animated in the browser (keeps moving while the server waits).
+    The text colour follows the page's light/dark switch, which lives in the parent document."""
     tips = json.dumps(TIPS)
+    muted = json.dumps({name: p["muted"] for name, p in palettes.items()})
     return f"""<!doctype html><html><head>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 html,body{{margin:0;background:transparent;font-family:'Plus Jakarta Sans',system-ui,sans-serif;}}
-.row{{color:{palette['muted']};font-size:13.5px;padding:2px 2px;}}
+.row{{font-size:13.5px;padding:2px 2px;}}
 .tip{{transition:opacity .5s;}}
 </style></head><body>
 <div class="row">A 45–60 min class usually takes about 5–7 minutes.</div>
 <div class="row"><span class="tip" id="tip">Tip: {escape(TIPS[0])}</span></div>
 <script>
-const tips = {tips};
+const tips = {tips}, muted = {muted};
 let i = 0;
+function colour() {{
+  let t = 'light';
+  try {{ t = window.parent.document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }} catch (e) {{}}
+  document.body.style.color = muted[t];
+}}
+colour(); setInterval(colour, 400);
 setInterval(() => {{
   const el = document.getElementById('tip'); el.style.opacity = 0;
   setTimeout(() => {{ i = (i + 1) % tips.length; el.textContent = 'Tip: ' + tips[i]; el.style.opacity = 1; }}, 500);
@@ -128,52 +136,54 @@ def _confidence_word(c: float) -> str:
 
 
 def _chip(ts: str) -> str:
-    return f'<span class="cc-chip">{escape(ts)}</span>'
+    return f'<span class="cc-chip">{escape(explain.display_time(ts))}</span>'
 
 
 def _evidence_list(items, empty: str = "") -> str:
     if not items:
         return f'<p class="cc-muted">{escape(empty)}</p>' if empty else ""
     lis = "".join(f'<li>{_chip(e.timestamp)}<span class="cc-src {escape(e.source)}">'
-                  f'{SOURCE_LABEL.get(e.source, e.source)}</span><span>{escape(e.observation)}</span></li>'
+                  f'{explain.EVIDENCE_SOURCE.get(e.source, e.source)}</span><span>{escape(e.observation)}</span></li>'
                   for e in items)
     return f'<ul class="cc-ev">{lis}</ul>'
+
+
+def _scale_html(r) -> str:
+    bands = explain.scale(r)
+    segs = "".join(f'<div class="cc-band{" on" if name == r.score_label else ""}" style="flex:{hi - lo:.2f}">'
+                   f'<span>{escape(name)}</span></div>' for name, lo, hi in bands)
+    return (f'<div class="cc-scale"><div class="cc-bands">{segs}</div>'
+            f'<div class="cc-marker" style="left:{min(max(r.score / 5, 0), 1) * 100:.1f}%"></div></div>')
 
 
 def hero_html(res: PipelineResult) -> str:
     r, a = res.result, res.assessment
     s = summarize(res)
+    rubric = load_rubric()
     colour = LABEL_COLOUR[r.label]
-    conf_word = _confidence_word(r.confidence)
+    sure = explain.certainty(r.confidence)
     lang = s["language"] or "unknown"
-    reasons = "".join(f"<li>{escape(x)}</li>" for x in r.confidence_reasons)
-    rules = ""
-    if r.rules_applied:
-        lowered = r.score_label and r.score_label != r.label
-        head = (f"Label set to {escape(r.label)} by required standards (score alone: {escape(r.score_label)})"
-                if lowered else "Required standards not met")
-        items = "".join(f"<li>{escape(x)}</li>" for x in r.rules_applied)
-        rules = f'<div class="cc-rules"><div class="cc-rules-head">{head}</div><ul>{items}</ul></div>'
     badge = '<div class="cc-qi">Recording quality issue</div>' if r.quality_issue else ""
-    low = (f'<div class="cc-banner">Low confidence: treat this label as provisional. '
-           f'{escape(" ".join(r.confidence_reasons))}</div>') if r.low_confidence else ""
+    why = "".join(f"<li>{escape(x)}</li>" for x in explain.main_reasons(r, a, rubric))
+    sure_why = "".join(f"<li>{escape(explain.plain_reason(x))}</li>" for x in r.confidence_reasons)
+    lowered = (f'<p class="cc-muted cc-small">On its score alone this class would be {escape(r.score_label)}; '
+               f'the required standards below set it to {escape(r.label)}.</p>'
+               if r.score_label and r.score_label != r.label else "")
     return _compact(f"""
 <div class="cc-card cc-hero" style="--label:{colour}">
 <div class="cc-hero-main">
-<div class="cc-label-wrap"><div class="cc-kicker">Overall label</div><div class="cc-label">{escape(r.label)}</div>{badge}</div>
-<div class="cc-hero-stats">
-<div class="cc-stat"><div class="cc-kicker">Score</div><div class="cc-stat-value">{r.score:.2f}<span>/5</span></div>
-<div class="cc-scorebar"><div style="width:{r.score / 5 * 100:.0f}%"></div></div></div>
-<div class="cc-stat"><div class="cc-kicker">Confidence</div><div class="cc-stat-value">{r.confidence:.0%}<span> {conf_word}</span></div>
-<div class="cc-scorebar conf"><div style="width:{r.confidence * 100:.0f}%"></div></div></div>
+<div class="cc-label-wrap"><div class="cc-kicker">Overall result</div><div class="cc-label">{escape(r.label)}</div>{badge}</div>
+<div class="cc-meaning"><div class="cc-kicker">What this means</div><p>{escape(explain.label_meaning(r))}</p></div>
 </div>
-</div>
-<div class="cc-meta"><span>{s['duration_min']} min</span><span>{escape(lang)}</span><span>{s['events']} moments analysed</span>
-<span>{r.weight_coverage:.0%} of rubric scored</span></div>
+<div class="cc-scorebox"><div class="cc-kicker">Score: {r.score:.1f} out of 5</div>{_scale_html(r)}</div>
+<div class="cc-sure"><span class="cc-kicker">How sure is this result?</span>&nbsp;<b>{sure}.</b>&nbsp;
+<span class="cc-muted">{escape(explain.CERTAINTY_MEANING[sure])}</span>
+{f'<details class="cc-reasons"><summary>Why?</summary><ul>{sure_why}</ul></details>' if sure_why else ''}</div>
+<h3 class="cc-h3 cc-sub">In Short</h3>
 <p class="cc-summary">{escape(a.summary)}</p>
-{rules}
-{low}
-{f'<details class="cc-reasons"><summary>Why This Confidence?</summary><ul>{reasons}</ul></details>' if reasons else ''}
+{f'<h3 class="cc-h3 cc-sub">Why This Result</h3>{lowered}<ul class="cc-why">{why}</ul>' if why else ''}
+<div class="cc-meta"><span>{s['duration_min']} min class</span><span>{escape(lang)}</span>
+<span>Times like 12:05 mean minutes:seconds into the recording</span></div>
 </div>""")
 
 
@@ -181,8 +191,8 @@ def strengths_html(res: PipelineResult) -> str:
     a = res.assessment
     return _compact(f"""
 <div class="cc-grid2">
-<div class="cc-card"><h3 class="cc-h3">Strengths</h3>{_evidence_list(a.strengths, "No specific strengths were evidenced.")}</div>
-<div class="cc-card"><h3 class="cc-h3">Areas To Improve</h3>{_evidence_list(a.improvements, "No specific improvements were evidenced.")}</div>
+<div class="cc-card"><h3 class="cc-h3">What Went Well</h3>{_evidence_list(a.strengths, "No specific strengths were evidenced.")}</div>
+<div class="cc-card"><h3 class="cc-h3">What To Improve</h3>{_evidence_list(a.improvements, "No specific improvements were evidenced.")}</div>
 </div>""")
 
 
@@ -191,23 +201,19 @@ def dimensions_html(res: PipelineResult) -> str:
     cards = []
     for d in res.assessment.dimensions:
         spec = rubric.get(d.dimension, {})
-        name = spec.get("name", d.dimension)
-        if d.score is None:
-            score = '<span class="cc-pill missing">Not scored</span>'
-            bar = ""
-        else:
-            score = f'<span class="cc-dim-score">{d.score:.1f}<span>/5</span></span>'
-            bar = f'<div class="cc-scorebar"><div style="width:{d.score / 5 * 100:.0f}%"></div></div>'
-        empty = "No supporting evidence was available for this dimension." if d.score is None else ""
+        word = explain.rating(d.score)
+        number = "" if d.score is None else f'<span class="cc-muted cc-small">{d.score:.1f} / 5</span>'
+        examples = (f'<details class="cc-examples"><summary>Show examples ({len(d.evidence)})</summary>'
+                    f'{_evidence_list(d.evidence)}</details>' if d.evidence else "")
         cards.append(f"""
 <div class="cc-card cc-dim">
-<div class="cc-dim-head"><div><div class="cc-dim-name">{escape(name)}</div>
-<div class="cc-muted cc-small">weight {spec.get('weight', 0):.0%}</div></div>{score}</div>
-{bar}
-<p class="cc-rationale">{escape(d.rationale)}</p>
-{_evidence_list(d.evidence, empty)}
+<div class="cc-dim-head"><div class="cc-dim-name">{escape(spec.get('name', d.dimension))}</div>
+<span class="cc-rating {word.lower().replace(' ', '-')}">{word}</span></div>
+<div class="cc-question">{escape(explain.AREA_QUESTION.get(d.dimension, ''))} {number}</div>
+<p class="cc-rationale">{escape(d.rationale or 'This area could not be checked from this recording.')}</p>
+{examples}
 </div>""")
-    return _compact('<h2 class="cc-h2">How The Class Scored</h2><div class="cc-dims">' + "".join(cards) + "</div>")
+    return _compact('<h2 class="cc-h2">Area By Area</h2><div class="cc-dims">' + "".join(cards) + "</div>")
 
 
 def signals_html(res: PipelineResult) -> str:

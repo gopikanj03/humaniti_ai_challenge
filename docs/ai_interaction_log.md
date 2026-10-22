@@ -143,3 +143,13 @@ the single template; tutors use slightly different versions of the 8x8 backgroun
 (from B472 and B491, face-checked) fixed it: logo frames now score 0.98-1.00 and no-logo frames at most 0.52 across
 five classes, and B392 ("no background") stays at 0 of 16. Without this fix the new rule would have wrongly
 capped two classes (B472, average/B435).
+
+## Results written for non-technical readers (owner request)
+
+The owner found the results hard to understand for someone without a technical background. The page and the PDF
+now lead with plain language: what the label means in one sentence, a score bar showing where it falls between
+Poor and Excellent, "how sure is this result" in words, a short summary, and the few reasons behind the result.
+Each area is a simple question ("Is what the tutor teaches correct?") with a rating in words (Strong / Fine /
+Needs work / Weak / Not checked) and examples behind a toggle. Evidence is tagged "Said in class / Measured /
+Seen on video", whole-class items show "Overall", and all technical measurements moved into one collapsed
+"Technical Details" section. The judge is told to write for a parent or manager, without technical terms.

@@ -31,14 +31,10 @@ LOGO_B64 = base64.b64encode((ASSETS / "logo.png").read_bytes()).decode()
 st.set_page_config(page_title=TITLE, page_icon=str(ASSETS / "logo.png"), layout="centered", initial_sidebar_state="collapsed")
 
 # ---------------------------------------------------------------- theme
-if "dark" not in st.session_state:
-    st.session_state.dark = False
-_, toggle_col = st.columns([5, 1])
-with toggle_col:
-    st.toggle("Dark", key="dark")
-theme = "dark" if st.session_state.dark else "light"
-st.markdown(css(theme), unsafe_allow_html=True)
-components.html(background_js(theme), height=0)
+# The light/dark switch is injected into the page by background_js() and works purely in the browser:
+# switching never re-runs this script, so an analysis in progress is not interrupted.
+st.markdown(css(), unsafe_allow_html=True)
+components.html(background_js(), height=0)
 
 # ---------------------------------------------------------------- header
 st.markdown(f'<div class="app-brand"><img class="app-logo" alt="" src="data:image/png;base64,{LOGO_B64}">'
@@ -66,7 +62,7 @@ def analyze(tmp_path: str | None, url: str | None) -> None:
     tracker = st.empty()
     clock = st.empty()   # typical duration + rotating tips, animated in the browser while the server works
     with clock.container():
-        components.html(ui.live_tips_html(PALETTES[theme]), height=52)
+        components.html(ui.live_tips_html(PALETTES), height=52)
     is_link = tmp_path is None
 
     def on_stage(stage: str, frac: float, detail: str = "") -> None:
@@ -125,12 +121,14 @@ if result is not None and result.result is not None:
     st.markdown(ui.hero_html(result), unsafe_allow_html=True)
     st.markdown(ui.strengths_html(result), unsafe_allow_html=True)
     st.markdown(ui.dimensions_html(result), unsafe_allow_html=True)
-    st.markdown('<h2 class="cc-h2">How This Was Assessed</h2>', unsafe_allow_html=True)
-    st.markdown(ui.signals_html(result), unsafe_allow_html=True)
-    with st.expander("Computed Metrics"):
-        st.markdown(ui.metrics_html(result), unsafe_allow_html=True)
     data = report.report_data(result)
     st.markdown('<h2 class="cc-h2">Download Report</h2>', unsafe_allow_html=True)
     st.download_button("Download PDF", report.to_pdf(data), file_name="classcritique_report.pdf",
                        mime="application/pdf")
-    st.caption("The PDF contains the result, strengths, areas to improve and the evidence for each score.")
+    st.caption("The PDF contains the same plain-language result, what went well, what to improve and the "
+               "evidence for each area.")
+    # Everything technical stays out of the way for everyday readers.
+    with st.expander("Technical Details (for reviewers)"):
+        st.caption("What was measured, how reliable each measurement is, and what could not be checked.")
+        st.markdown(ui.signals_html(result), unsafe_allow_html=True)
+        st.markdown(ui.metrics_html(result), unsafe_allow_html=True)

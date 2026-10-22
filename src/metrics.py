@@ -41,6 +41,7 @@ def humanize(text: str) -> str:
         key = match.group(1)
         return METRIC_LABELS.get(key, key.replace("_", " ")).lower()
     text = re.sub(r"\b([a-z]+(?:_[a-z0-9]+)+)\b", name, text)
+    text = re.sub(r"\s*\((?:visual )?metrics?\)", "", text)  # tags like "(metric)" mean nothing to readers
     text = re.sub(r"\s*=\s*(true|True)\b", ": yes", text)
     text = re.sub(r"\s*=\s*(false|False)\b", ": no", text)
     return re.sub(r"\s+=\s+", ": ", text)  # "name = value" only; leaves "2+2=4" alone
