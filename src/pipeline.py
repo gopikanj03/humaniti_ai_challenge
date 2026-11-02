@@ -258,7 +258,7 @@ def run(src_path: str | Path | None = None, on_stage: StageFn | None = None, *,
                 dimensions=[DimensionScore(dimension=d["id"]) for d in scoring.load_rubric()["dimensions"]],
                 is_class_recording=False, confidence=0.8, not_class_reason=why)
         elif digests:
-            notify("Assessing against the rubric", 0.0, "Scoring 6 rubric areas and checking every piece of evidence")
+            notify("Assessing against the rubric", 0.0, "Scoring 7 rubric areas and checking every piece of evidence")
             assessment, _ = evaluate(digests, metrics, meta, file_hash,
                                      visual=vis.observations if vis and vis.frames else None)
         else:
